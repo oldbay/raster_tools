@@ -31,23 +31,23 @@ if __name__ == "__main__":
     array2raster(MASK, ndwi, path+"/index_ndwi.tif")
 
     #разница NDVI и NDWI
-    # vwdif = ndvi - ndwi
-    # print "VWdiff"
-    # array2raster(MASK, vwdif, path+"/index_vwdif.tif")
-    # vwdif_bug = np.where(vwdif < 0, -0.5, vwdif)
-    # array2raster(MASK, vwdif_bug, path+"/index_vwdif_bug.tif")
+    vwdif = ndvi - ndwi
+    print "VWdiff"
+    array2raster(MASK, vwdif, path+"/index_vwdif.tif")
+    vwdif_bug = np.where(vwdif < 0, -0.5, vwdif)
+    array2raster(MASK, vwdif_bug, path+"/index_vwdif_bug.tif")
 
     #сумма NDVI и NDWI
-    # vwsum = ndvi + ndwi
-    # print "VWsum"
-    # array2raster(MASK, vwsum, path+"/index_vwsum.tif")
+    vwsum = ndvi + ndwi
+    print "VWsum"
+    array2raster(MASK, vwsum, path+"/index_vwsum.tif")
 
     #ТРАНСПИРАЦИОННЫЙ NDVI
     #----------------------
     #транспирационная маска
     tmask = ndwi * (ndvi + ndwi)
-    # print "TMask"
-    # array2raster(MASK, tmask, path+"/index_tmask.tif")
+    print "TMask"
+    array2raster(MASK, tmask, path+"/index_tmask.tif")
 
     #транспирационный ndvi - tndvi
     tndvi = ndvi - tmask

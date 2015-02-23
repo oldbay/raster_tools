@@ -70,8 +70,6 @@ calc_raster.py <каталог со спектральными растрами>
 В результате работы скрипта в каталоге со спектральными растрами
 будут созданы растры индексов:
 
-index_nbr.tif - NBR
-index_nddi.tif - NDDI
 index_ndvi.tif - NDVI
 index_ndwi.tif - NDWI
 index_tmask.tif - транспирационная маска
