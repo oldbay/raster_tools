@@ -23,7 +23,7 @@ def run():
         if os.path.basename(_config) in os.listdir(os.path.dirname(_config)):
             os.environ["RASTER_TOOLS_CONF"] = os.path.abspath(sys.argv[3])
         else:
-            print "Config '%s' not found - use default"%_config
+            print "Config '%s' not found - use default!"%_config
 
     from raster_tools.config import calc_methods
 
@@ -33,7 +33,7 @@ def run():
         if os.path.basename(_file) in os.listdir(os.path.dirname(_file)):
             calc_methods[_method].calc(_file)
         else:
-            print "Metadata for calculate '%s' file '%s' not found"%(_method, _file)
+            print "Config file %s for method '%s' - not found"%(_file, _method)
     else:
-        print "Sat type '%s' not found in config file"%sys.argv[1]
+        print "Calc method '%s' not found in config file"%sys.argv[1]
         sys.exit(1)
