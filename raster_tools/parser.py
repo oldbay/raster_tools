@@ -1,38 +1,11 @@
 #!/usr/bin/python2
 # -*- coding: utf-8 -*-
 
+import telnetlib
 from pyparsing import (Word,
                        Suppress,
                        alphas,
                        nums)
-
-"""
-sun horison delta:
-http://ssd.jpl.nasa.gov/horizons.cgi
------------------------------------------------------------------
-Ephemeris Type : OBSERVER
-Target Body  :  Sun [Sol] [10]
-Observer Location :  user defined ( 47°36'00.0''E, 48°30'36.0''N )
-Time Span  :  Start=2006-01-01, Stop=2015-01-01, Step=1 d
-Table Settings  :  QUANTITIES=20; object page=NO
-Display/Output  :  download/save (plain text file)
------------------------------------------------------------------
-
-"""
-months = {
-    "Jan": "01",
-    "Feb": "02",
-    "Mar": "03",
-    "Apr": "04",
-    "May": "05",
-    "Jun": "06",
-    "Jul": "07",
-    "Aug": "08",
-    "Sep": "09",
-    "Oct": "10",
-    "Nov": "11",
-    "Dec": "12"
-}
 
 def mtl_parser(mtl_file):
 
@@ -60,57 +33,62 @@ def mtl_parser(mtl_file):
     return mtl_lib
 
 
-def sun_parser(sun_file):
+def sun_parser(host, port, **kwargs):
 
-    sunfile = open(sun_file, mode="r")
+    _telnet = telnetlib.Telnet()
+    _telnet.open(host, port)
 
-    sun_delta = {}
-    table = False
-    for line in sunfile:
+    expect = ( ( r'Horizons>', 'Sun\n' ),
+            ( r'Continue.*:', 'y\n' ),
+            ( r'Select.*E.phemeris.*:', 'E\n'),
+            ( r'Observe.*:', 'o\n' ),
+            ( r'Coordinate center.*:', 'coord\n' ),
+            ( r'Cylindrical or Geodetic input.*:', 'g\n' ),
+            ( r'Specify geodetic.*:', '%s,%s,0.0000000\n'%(
+                str(kwargs['lon_center']), str(kwargs['lat_center']))),
+            ( r'Starting *UT.* :', '%s %s\n'%(
+                str(kwargs['horizon_date']), str(kwargs['horizon_time']))),
+            ( r'Ending *UT.* :', '%s 23:59:59\n'%str(kwargs['horizon_date'])),
+            ( r'Output interval.*:', '1d\n' ),
+            ( r'Accept default output.*:', 'y\n'),
+            ( r'Select table quant.* :', '4,20\n' ),
+            ( r'Scroll . Page: .*%', ' '),
+            ( r'Select\.\.\. .A.gain.* :', 'X\n' )
+    )
 
-        if (line.find('$$EOE') >= 0):
-            table = False
+    while True:
+        try:
+            answer = _telnet.expect(list(i[0] for i in expect), 10)
+        except EOFError:
+            break
+        else:
+            if expect[answer[0]][1] == 'X\n':
+                # output
+                _cont = answer[2].split('\n')
+                _pr = False
+                for _c in _cont:
 
-        if table:
-            li = line.split(" ")
-            li.remove('00:00')
+                    if _c.find('$$EOE') >= 0:
+                        _pr = False
+                        break
 
-            try:
-                li.remove('A')
-            except:
-                pass
-            try:
-                li.remove('N')
-            except:
-                pass
-            try:
-                li.remove('m')
-            except:
-                pass
-            try:
-                li.remove('Am')
-            except:
-                pass
-            try:
-                li.remove('Nm')
-            except:
-                pass
+                    if _pr:
+                        _out = _c.split(' ')
+                        # delete emtpy
+                        while True:
+                            try:
+                                _out.remove('')
+                            except:
+                                break
+                        # print _out
+                        # print [ float(my) for my in _out[-4:]]
 
-            while True:
-                try:
-                    li.remove('')
-                except:
-                    break
+                    if _c.find('$$SOE')>= 0:
+                        _pr = True
+            _telnet.write(expect[answer[0]][1])
 
-            date = li[0].split("-")
-            date[1] = months[date[1]]
-            date = "-".join(date)
-
-            sun_delta[date] = float(li[1])
-
-        if (line.find('$$SOE') >= 0):
-            table = True
-
-    sunfile.close()
-
-    return sun_delta
+    return {
+        "SUN_AZIMUTH": float(_out[-4:][0]),
+        "SUN_ELEVATION": float(_out[-4:][1]),
+        "EARTH_SUN_DISTANCE": float(_out[-4:][2]),
+    }

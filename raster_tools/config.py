@@ -19,6 +19,11 @@ raster_params = {
     "max": 1,
 }
 
+horizon_telnet = {
+    "host": "horizons.jpl.nasa.gov",
+    "port": 6775,
+}
+
 cnls = {
     "LANDSAT_5": {
         "blue": {'cnum': '1', 'esun': 1983.0, 'c':False},
@@ -46,8 +51,11 @@ cnls = {
     },
 }
 
-#If False - use calculation with
-#http://grass.osgeo.org/grass65/manuals/i.landsat.toar.html
-#If True - use Konstant with
-#http://www.gisagmaps.com/landsat-8-atco/
+# If False - use calculation with
+# http://grass.osgeo.org/grass65/manuals/i.landsat.toar.html
+# If True - use Konstant with
+# http://www.gisagmaps.com/landsat-8-atco/
 landsat8_const_esun = False
+
+# Data priority sun(horizont sol data), sat(data for satelite) .. next
+data_priority=['sun','sat']

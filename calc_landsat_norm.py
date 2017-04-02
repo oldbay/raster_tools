@@ -86,9 +86,8 @@ if __name__ == "__main__":
 
     mtl_file = os.path.abspath(sys.argv[1])
     mtl_path = os.path.dirname(mtl_file)
-    sun_file = os.path.abspath(sys.argv[2])
 
-    bands_all = spectres.init(mtl_file, sun_file)
+    bands_all = spectres.init(mtl_file)
 
     for band in bands_all.keys():
 
