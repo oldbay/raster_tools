@@ -9,10 +9,11 @@ setup(
     long_description=open(join(dirname(__file__), 'README')).read(),
     entry_points={
         'console_scripts':
-        ['raster_tools_util = raster_norms.util:run']
+        ['raster_tools_calc = raster_calc.util:run']
     },
     install_requires=[
-        'GDAL'
+        'GDAL',
+        'numpy'
     ]
 )
 

@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
-
 from raster_tools import raster2array, array2raster
 
 
@@ -99,3 +98,10 @@ def calc_index(path):
     # sarvi2 = (25 * (NIR - RED)) / (1 + NIR + (6 * RED) - (7.5 * BLUE))
     # print "SARVI2"
     # array2raster(METADATA, sarvi2, path+"/index_sarvi2.tif")
+
+
+if __name__ == "__main__":
+    import os, sys
+
+    #First argument -  path to Geodata directory
+    calc_index(os.path.abspath(sys.argv[1]))

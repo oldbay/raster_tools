@@ -25,15 +25,15 @@ def run():
         else:
             print "Config '%s' not found - use default"%_config
 
-    from raster_tools.config import norm_methods
+    from raster_tools.config import calc_methods
 
-    if sys.argv[1] in norm_methods.keys():
-        _sat_type = sys.argv[1]
-        _sat_file = _config = os.path.realpath(sys.argv[2])
-        if os.path.basename(_sat_file) in os.listdir(os.path.dirname(_sat_file)):
-            norm_methods[_sat_type].norm(_sat_file)
+    if sys.argv[1] in calc_methods.keys():
+        _method = sys.argv[1]
+        _file = _config = os.path.realpath(sys.argv[2])
+        if os.path.basename(_file) in os.listdir(os.path.dirname(_file)):
+            calc_methods[_method].calc(_file)
         else:
-            print "Metadata for satelite '%s' file '%s' not found"%(_sat_type, _sat_file)
+            print "Metadata for calculate '%s' file '%s' not found"%(_method, _file)
     else:
         print "Sat type '%s' not found in config file"%sys.argv[1]
         sys.exit(1)

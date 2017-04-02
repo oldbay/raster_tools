@@ -1,6 +1,7 @@
 #!/usr/bin/python2
 # -*- coding: utf-8 -*-
 
+import os
 import numpy as np
 
 def dark(data):
@@ -78,9 +79,8 @@ def dos_method(Lsat, Lp,  mtl, Qz, Tz):
     return Psup
 
 
-def norm(mtl_file):
+def calc(mtl_file):
 
-    import os
     from raster_tools import raster2array, array2raster, spectres, raster_params
 
     mtl_path = os.path.dirname(mtl_file)
@@ -149,4 +149,4 @@ def norm(mtl_file):
 
 if __name__ == "__main__":
     import os, sys
-    norm(os.path.abspath(sys.argv[1]))
+    calc(os.path.abspath(sys.argv[1]))

@@ -18,7 +18,10 @@ LICENSE="GPL-2"
 SLOT="0"
 KEYWORDS=""
 
-DEPEND="sci-libs/gdal"
+DEPEND="
+    sci-libs/gdal
+	dev-python/numpy
+	"
 RDEPEND="${DEPEND}"
 
 python_install_all() {

@@ -61,9 +61,11 @@ cnls = {
 # http://www.gisagmaps.com/landsat-8-atco/
 landsat8_const_esun = False
 
-# Import scripts for normalize raster
-norm_methods = {
-    "landsat": importlib.import_module("raster_norms.landsat"),
+# Import scripts for calculate raster
+calc_methods = {
+    "landsat": importlib.import_module("raster_calc.landsat"),
+    "ndvi": importlib.import_module("raster_calc.ndvi"),
+    "ndwi": importlib.import_module("raster_calc.ndwi"),
 }
 
 # Data priority sun(horizont sol data), sat(data for satelite) .. next
@@ -86,6 +88,6 @@ if "RASTER_TOOLS_CONF" in os.environ:
         if "horizon_telnet" in conf.__dict__: horizon_telnet = conf.horizon_telnet
         if "cnls" in conf.__dict__: cnls = conf.cnls
         if "landsat8_const_esun" in conf.__dict__: landsat8_const_esun = conf.landsat8_const_esun
-        if "norm_methods" in conf.__dict__: norm_methods = conf.norm_methods
+        if "calc_methods" in conf.__dict__: calc_methods = conf.calc_methods
         if "data_priority" in conf.__dict__: data_priority = conf.data_priority
         if "echo_output" in conf.__dict__: echo_output = conf.echo_output
