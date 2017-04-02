@@ -1,7 +1,11 @@
 #!/usr/bin/python2
 # -*- coding: utf-8 -*-
 
+import os, sys
+import importlib
 import numpy as np
+
+
 
 """
 Global configs
@@ -57,5 +61,31 @@ cnls = {
 # http://www.gisagmaps.com/landsat-8-atco/
 landsat8_const_esun = False
 
+# Import scripts for normalize raster
+norm_methods = {
+    "landsat": importlib.import_module("raster_norms.landsat"),
+}
+
 # Data priority sun(horizont sol data), sat(data for satelite) .. next
-data_priority=['sun','sat']
+data_priority = ['sun','sat']
+
+# Echo output (True, False)
+echo_output = False
+
+
+# raplace default from config file
+if "RASTER_TOOLS_CONF" in os.environ:
+    _conf_name = os.path.realpath(os.environ["RASTER_TOOLS_CONF"])
+    if os.path.basename(_conf_name) in os.listdir(os.path.dirname(_conf_name)):
+        _module_dirname = os.path.dirname(_conf_name)
+        _module_name = os.path.basename(_conf_name).split(".")[0]
+        sys.path.append(_module_dirname)
+        conf = importlib.import_module(_module_name)
+        if "GDAL_OPTS" in conf.__dict__: GDAL_OPTS = conf.GDAL_OPTS
+        if "raster_params" in conf.__dict__: raster_params = conf.raster_params
+        if "horizon_telnet" in conf.__dict__: horizon_telnet = conf.horizon_telnet
+        if "cnls" in conf.__dict__: cnls = conf.cnls
+        if "landsat8_const_esun" in conf.__dict__: landsat8_const_esun = conf.landsat8_const_esun
+        if "norm_methods" in conf.__dict__: norm_methods = conf.norm_methods
+        if "data_priority" in conf.__dict__: data_priority = conf.data_priority
+        if "echo_output" in conf.__dict__: echo_output = conf.echo_output

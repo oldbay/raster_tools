@@ -13,7 +13,7 @@ from config import (
 from parser import sun_parser, mtl_parser
 
 
-class spectr():
+class landsat_spec(object):
 
     def __init__(self, sat_id, cnl, mtl, sun):
 
@@ -56,39 +56,43 @@ class spectr():
         # print "chennel %s - ESUN=%s"%(cnl, out[cnl]['esun'])
 
 
-def init(telfile):
+class init(object):
 
-    mtl_file = os.path.abspath(telfile)
-    mtl = mtl_parser(mtl_file)
-    # data for horizon
-    horizon_date = mtl['PRODUCT_METADATA']['DATE_ACQUIRED']
-    horizon_time = mtl['PRODUCT_METADATA']['SCENE_CENTER_TIME'].split(".")[0]
-    lat_list = [
-        float(mtl['PRODUCT_METADATA']['CORNER_UL_LAT_PRODUCT']),
-        float(mtl['PRODUCT_METADATA']['CORNER_UR_LAT_PRODUCT']),
-        float(mtl['PRODUCT_METADATA']['CORNER_LL_LAT_PRODUCT']),
-        float(mtl['PRODUCT_METADATA']['CORNER_LR_LAT_PRODUCT']),
-    ]
-    lat_center = min(lat_list) + (max(lat_list) - min(lat_list))/2
-    lon_list = [
-        float(mtl['PRODUCT_METADATA']['CORNER_UL_LON_PRODUCT']),
-        float(mtl['PRODUCT_METADATA']['CORNER_UR_LON_PRODUCT']),
-        float(mtl['PRODUCT_METADATA']['CORNER_LL_LON_PRODUCT']),
-        float(mtl['PRODUCT_METADATA']['CORNER_LR_LON_PRODUCT']),
-    ]
-    lon_center = min(lon_list) + (max(lon_list) - min(lon_list))/2
-    sun = sun_parser(
-        horizon_telnet["host"],
-        horizon_telnet["port"],
-        horizon_date=horizon_date,
-        horizon_time=horizon_time,
-        lat_center=lat_center,
-        lon_center=lon_center
-    )
-    sat_id = str(mtl['PRODUCT_METADATA']['SPACECRAFT_ID'])[1:-1]
+    def __init__(self, sat_config):
+        self.sat_config = sat_config
 
-    spectres = {}
-    for cnl in cnls[sat_id].keys():
-        spectres[cnl] = spectr(sat_id, cnl, mtl, sun)
 
-    return spectres
+    def landsat(self):
+        mtl = mtl_parser(os.path.abspath(self.sat_config))
+        # data for horizon
+        horizon_date = mtl['PRODUCT_METADATA']['DATE_ACQUIRED']
+        horizon_time = mtl['PRODUCT_METADATA']['SCENE_CENTER_TIME'].split(".")[0]
+        lat_list = [
+            float(mtl['PRODUCT_METADATA']['CORNER_UL_LAT_PRODUCT']),
+            float(mtl['PRODUCT_METADATA']['CORNER_UR_LAT_PRODUCT']),
+            float(mtl['PRODUCT_METADATA']['CORNER_LL_LAT_PRODUCT']),
+            float(mtl['PRODUCT_METADATA']['CORNER_LR_LAT_PRODUCT']),
+        ]
+        lat_center = min(lat_list) + (max(lat_list) - min(lat_list))/2
+        lon_list = [
+            float(mtl['PRODUCT_METADATA']['CORNER_UL_LON_PRODUCT']),
+            float(mtl['PRODUCT_METADATA']['CORNER_UR_LON_PRODUCT']),
+            float(mtl['PRODUCT_METADATA']['CORNER_LL_LON_PRODUCT']),
+            float(mtl['PRODUCT_METADATA']['CORNER_LR_LON_PRODUCT']),
+        ]
+        lon_center = min(lon_list) + (max(lon_list) - min(lon_list))/2
+        sun = sun_parser(
+            horizon_telnet["host"],
+            horizon_telnet["port"],
+            horizon_date=horizon_date,
+            horizon_time=horizon_time,
+            lat_center=lat_center,
+            lon_center=lon_center
+        )
+        sat_id = str(mtl['PRODUCT_METADATA']['SPACECRAFT_ID'])[1:-1]
+
+        spectres = {}
+        for cnl in cnls[sat_id].keys():
+            spectres[cnl] = landsat_spec(sat_id, cnl, mtl, sun)
+
+        return spectres

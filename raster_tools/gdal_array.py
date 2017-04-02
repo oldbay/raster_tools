@@ -4,7 +4,7 @@
 from osgeo import gdal
 import numpy as np
 
-from config import GDAL_OPTS, raster_params
+from config import GDAL_OPTS, raster_params, echo_output
 
 class raster2array ():
 
@@ -49,8 +49,14 @@ class array2raster():
         self.Band.WriteArray(self.array)
         self.Band.FlushCache()
         # self.Band.SetNoDataValue(raster_params["min"])
-        print self.fname
-        print self.Band.GetStatistics(0, 1)
+        if echo_output:
+            statistics = self.Band.GetStatistics(0, 1)
+            print "Otupput raster: %s"%self.fname
+            print "Metadata:"
+            print "  STATISTICS_MAXIMUM=%s"%str(statistics[1])
+            print "  STATISTICS_MEAN=%s"%str(statistics[2])
+            print "  STATISTICS_MINIMUM=%s"%str(statistics[0])
+            print "  STATISTICS_STDDEV=%s"%str(statistics[3])
         self.Band = None
         self.Ds.SetGeoTransform(self.GeoTransform)
         self.Ds.SetProjection(self.Projection)
