@@ -6,9 +6,9 @@ import os
 
 def helpmy():
     print """
-    calc_norm <sat type> <sat file> [<conf_file.py>]
+    raster_tools_calc <calc method> <conf file> [<conf_file.py>]
     or
-    env RASTER_TOOLS_CONF=<conf_file.py> calc_norm <sat type> <sat file>
+    env RASTER_TOOLS_CONF=<conf_file.py> raster_tools_calc <calc method> <conf file>
     conf_file.py - optionality
     """
 
