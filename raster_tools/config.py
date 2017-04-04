@@ -3,6 +3,7 @@
 
 import os, sys
 import importlib
+import types
 import numpy as np
 
 
@@ -83,11 +84,13 @@ if "RASTER_TOOLS_CONF" in os.environ:
         _module_name = os.path.basename(_conf_name).split(".")[0]
         sys.path.append(_module_dirname)
         conf = importlib.import_module(_module_name)
-        if "GDAL_OPTS" in conf.__dict__: GDAL_OPTS = conf.GDAL_OPTS
-        if "raster_params" in conf.__dict__: raster_params = conf.raster_params
-        if "horizon_telnet" in conf.__dict__: horizon_telnet = conf.horizon_telnet
-        if "cnls" in conf.__dict__: cnls = conf.cnls
-        if "landsat8_const_esun" in conf.__dict__: landsat8_const_esun = conf.landsat8_const_esun
-        if "calc_methods" in conf.__dict__: calc_methods = conf.calc_methods
-        if "data_priority" in conf.__dict__: data_priority = conf.data_priority
-        if "echo_output" in conf.__dict__: echo_output = conf.echo_output
+
+        # find variables
+        for var in locals().keys():
+            if type(locals()[var]) != types.ModuleType and var[:1] != "_":
+                if var in conf.__dict__:
+                    if type(locals()[var]) == types.DictType:
+                        for _key in conf.__dict__[var].keys():
+                            locals()[var][_key] = conf.__dict__[var][_key]
+                    else:
+                        locals()[var] = conf.__dict__[var]
