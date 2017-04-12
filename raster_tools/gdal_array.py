@@ -2,9 +2,6 @@
 # -*- coding: utf-8 -*-
 
 from osgeo import gdal
-import os
-# import numpy as np
-
 from config import GDAL_OPTS, raster_params, echo_output
 
 
@@ -32,20 +29,22 @@ class raster2array ():
 
 class array2raster():
 
-    def __init__(self, _raster, _array, _fname=False):
+    def __init__(self, _raster, _array, _fname=False, _drvname=False):
 
         self.array = _array
+        self.fname = _fname
+        self.drvname = _drvname
+        self._gdal_opts = self._gdal_test()
         # image size and tiles
         self.GeoTransform = _raster.GeoTransform
         self.Projection = _raster.Projection
-        drv = gdal.GetDriverByName("GTiff")
-        self.fname = _fname
-        self.Ds = drv.Create(self._fname_return(),
+        drv = gdal.GetDriverByName(self.drvname)
+        self.Ds = drv.Create(self.fname,
                              _raster.cols,
                              _raster.rows,
                              _raster.bands,
                              _raster.codage,
-                             options=GDAL_OPTS)
+                             options=self._gdal_opts)
         self.Ds.SetGeoTransform(self.GeoTransform)
         self.Ds.SetProjection(self.Projection)
         self.Band = self.Ds.GetRasterBand(1)
@@ -53,17 +52,23 @@ class array2raster():
         self.Band.FlushCache()
         # self.Band.SetNoDataValue(raster_params["min"])
 
-    def _fname_return(self):
-        if not self.fname:
-            return "/tmp/array2raster.cache"
+    def _gdal_test(self):
+        if (not self.fname and not self.drvname) or (not self.fname and self.drvname):
+            self.fname = ''
+            self.drvname = 'MEM'
+        elif self.fname and not self.drvname:
+            self.drvname = 'GTiff'
+
+        if self.drvname in GDAL_OPTS.keys():
+            return GDAL_OPTS[self.drvname]
         else:
-            return self.fname
+            return GDAL_OPTS['all']
 
     def __call__(self):
         return self.Band
 
     def __del__(self):
-        if echo_output and self.fname:
+        if echo_output and self.drvname != 'MEM':
             statistics = self.Band.GetStatistics(0, 1)
             print "Otupput raster: %s" % self.fname
             print "Metadata:"
@@ -73,5 +78,3 @@ class array2raster():
             print "  STATISTICS_STDDEV=%s" % str(statistics[3])
         self.Band = None
         self.Ds = None
-        if not self.fname:
-            os.remove(self._fname_return())

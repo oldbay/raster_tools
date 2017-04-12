@@ -7,16 +7,23 @@ import types
 import numpy as np
 
 
-
 """
 Global configs
 """
 
-GDAL_OPTS = ["COMPRESS=LZW",
-             "INTERLEAVE=PIXEL",
-             "TILED=YES",
-             "SPARSE_OK=TRUE",
-             "BIGTIFF=YES"]
+GDAL_OPTS = {
+    'MEM': [
+        "INTERLEAVE=PIXEL"
+    ],
+    'GTiff': [
+        "COMPRESS=LZW",
+        "INTERLEAVE=PIXEL",
+        "TILED=YES",
+        "SPARSE_OK=TRUE",
+        "BIGTIFF=YES"
+    ],
+    'all': [],
+}
 
 raster_params = {
     "nptype": np.float,
