@@ -1,10 +1,9 @@
 from setuptools import setup, find_packages
 from os.path import join, dirname
-from raster_tools import __version__
 
 setup(
     name='raster_tools',
-    version=__version__,
+    version='0.1',
     packages=find_packages(),
     long_description=open(join(dirname(__file__), 'README')).read(),
     entry_points={
@@ -16,4 +15,3 @@ setup(
         'numpy'
     ]
 )
-
