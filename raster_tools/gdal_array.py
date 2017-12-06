@@ -33,7 +33,6 @@ class array2raster():
 
     def __init__(self, _raster, _array, _fname=False, _drvname=False):
 
-        self.array = _array
         self.fname = _fname
         self.drvname = _drvname
         self._gdal_opts = self._gdal_test()
@@ -50,7 +49,7 @@ class array2raster():
         self.Ds.SetGeoTransform(self.GeoTransform)
         self.Ds.SetProjection(self.Projection)
         self.Band = self.Ds.GetRasterBand(1)
-        self.Band.WriteArray(self.array)
+        self.Band.WriteArray(_array)
         self.Band.FlushCache()
         # self.Band.SetNoDataValue(raster_params["min"])
 
