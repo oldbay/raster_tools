@@ -18,10 +18,12 @@ class raster2array ():
         self.bands = self.Ds.RasterCount
         self.codage = gdal.GDT_Float32
         self.Band = self.Ds.GetRasterBand(1)
-        self.array = self.Band.ReadAsArray().astype(raster_params["nptype"])
+
+    def array(self):
+        return self.Band.ReadAsArray().astype(raster_params["nptype"])
 
     def __call__(self):
-        return self.array
+        return self.array()
 
     def __del__(self):
         self.Ds = None
