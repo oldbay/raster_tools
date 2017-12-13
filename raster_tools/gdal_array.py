@@ -7,7 +7,7 @@ from config import GDAL_OPTS, raster_params, echo_output
 
 class raster2array ():
 
-    def __init__(self, fname):
+    def __init__(self, fname, _band=1):
 
         self.Ds = gdal.Open(fname)
         # image size and tiles
@@ -17,10 +17,25 @@ class raster2array ():
         self.rows = self.Ds.RasterYSize
         self.bands = self.Ds.RasterCount
         self.codage = gdal.GDT_Float32
-        self.Band = self.Ds.GetRasterBand(1)
+        self.Band = self.Ds.GetRasterBand(_band)
 
     def array(self):
         return self.Band.ReadAsArray().astype(raster_params["nptype"])
+
+    def get_array_index(self, x, y):
+        TL_x, x_res, _, TL_y, _, y_res = self.GeoTransform
+        x_index = int((x - TL_x) / x_res)
+        y_index = int((y - TL_y) / y_res)
+        return x_index, y_index
+
+    def get_pixel_value(self, x, y):
+        x_index, y_index = self.get_array_index(x, y)
+        return float(
+            self.array()[
+                y_index,
+                x_index
+            ]
+        )
 
     def __call__(self):
         return self.array()
@@ -31,7 +46,7 @@ class raster2array ():
 
 class array2raster():
 
-    def __init__(self, _raster, _array, _fname=False, _drvname=False):
+    def __init__(self, _raster, _array, _fname=False, _band=1, _drvname=False):
 
         self.fname = _fname
         self.drvname = _drvname
@@ -48,7 +63,7 @@ class array2raster():
                              options=self._gdal_opts)
         self.Ds.SetGeoTransform(self.GeoTransform)
         self.Ds.SetProjection(self.Projection)
-        self.Band = self.Ds.GetRasterBand(1)
+        self.Band = self.Ds.GetRasterBand(_band)
         self.Band.WriteArray(_array)
         self.Band.FlushCache()
         # self.Band.SetNoDataValue(raster_params["min"])
