@@ -18,9 +18,22 @@ class raster2array ():
         self.bands = self.Ds.RasterCount
         self.codage = gdal.GDT_Float32
         self.Band = self.Ds.GetRasterBand(_band)
+        self.np_array = None
 
     def array(self):
-        return self.Band.ReadAsArray().astype(raster_params["nptype"])
+        if self.np_array is None:
+            return self.Band.ReadAsArray().astype(raster_params["nptype"])
+        else:
+            return self.np_array
+
+    def np_array_load(self, _force=False):
+        # load numpy array to self class (Load  memory)
+        if self.np_array is None and not _force:
+            self.np_array = self.array()
+
+    def np_array_clean(self):
+        # clean numpy array from self class (Clean  memory)
+        self.np_array = None
 
     def get_array_index(self, x, y):
         TL_x, x_res, _, TL_y, _, y_res = self.GeoTransform
@@ -30,12 +43,7 @@ class raster2array ():
 
     def get_pixel_value(self, x, y):
         x_index, y_index = self.get_array_index(x, y)
-        return float(
-            self.array()[
-                y_index,
-                x_index
-            ]
-        )
+        return float(self.array()[y_index, x_index])
 
     def __call__(self):
         return self.array()
