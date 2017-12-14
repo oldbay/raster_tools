@@ -12,11 +12,15 @@ class raster2array ():
         self.Ds = gdal.Open(fname)
         # image size and tiles
         self.GeoTransform = self.Ds.GetGeoTransform()
+        self.TL_x = float(self.GeoTransform[0])
+        self.x_res = float(self.GeoTransform[1])
+        self.TL_y = float(self.GeoTransform[3])
+        self.y_res = float(self.GeoTransform[5])
         self.Projection = self.Ds.GetProjection()
         self.cols = self.Ds.RasterXSize
         self.rows = self.Ds.RasterYSize
         self.bands = self.Ds.RasterCount
-        self.codage = gdal.GDT_Float32
+        self.codage = gdal.GDT_Float64
         self.Band = self.Ds.GetRasterBand(_band)
         self.np_array = None
 
@@ -36,9 +40,18 @@ class raster2array ():
         self.np_array = None
 
     def get_array_index(self, x, y):
-        TL_x, x_res, _, TL_y, _, y_res = self.GeoTransform
-        x_index = int((x - TL_x) / x_res)
-        y_index = int((y - TL_y) / y_res)
+        # find x np array index
+        x_index = int((x - self.TL_x) / self.x_res)
+        if x_index >= self.cols:
+            x_index = self.cols - 1
+        if x_index < 0:
+            x_index = 0
+        # find y np array index
+        y_index = int((y - self.TL_y) / self.y_res)
+        if y_index >= self.rows:
+            y_index = self.rows - 1
+        if y_index < 0:
+            y_index = 0
         return x_index, y_index
 
     def get_pixel_value(self, x, y):
