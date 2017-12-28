@@ -10,7 +10,8 @@ numpy
 При наличии gdal и numpy развёрнутый из git код может сразу
 локально использоваться
 Для устаноки при помощи pip:
-pip install -e https://github.com/oldbay/raster_tools (или локальный каталог)
+pip install git+https://github.com/oldbay/raster_tools
+
 Для установки в gentoo linux представлен ebuild сценарий raster-tools-999.ebuild
 
 
