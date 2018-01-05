@@ -107,9 +107,12 @@ def calc(mtl_file):
 
         # Start math operations
         # ----------------
+
+        # <DEPRICATED>
         # Search data is outside the Range qc_lmin & qc_lmax
         # passer = np.logical_and( mtl.qc_lmin < data, data < mtl.qc_lmax )
         # data = np.where(passer, data, raster_params["min"])
+        # </DEPRICATED>
 
         # min dark object 1%
         DNdark001 = dark(data)
@@ -135,13 +138,15 @@ def calc(mtl_file):
         if mtl.c:
             outmath = mtl.c[0] + mtl.c[1] * outmath
 
+        # <DEPRICATED>
         # saturated pixels (> 1)
         # http://www.ncl.ac.uk/tcmweb/bilko/module7/lesson3.pdf
         # Because the exoatmospheric reflectance ρ has a value
         # between 0 and 1, the output image will need to be a
         # floating point (32 bit image).
-        mask = np.less_equal(outmath, raster_params["max"])
-        outmath = np.choose(mask, (raster_params["max"], outmath))
+        # mask = np.less_equal(outmath, raster_params["max"])
+        # outmath = np.choose(mask, (raster_params["max"], outmath))
+        # </DEPRICATED>
 
         # save band to specter
         array2raster(raster, outmath, mtl_path+"/"+band+".tif")
