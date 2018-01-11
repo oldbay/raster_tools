@@ -31,6 +31,10 @@ class raster2array (object):
     def array(self, x_index=0, y_index=0, x_size=None, y_size=None):
         """
         return numpy array this raster for coordinates
+        x_index - x index point np array
+        y_index - y index point np array
+        x_size - points for x axis
+        y_size - points for y axis
         """
         if self.np_array is None:
             return self.Band.ReadAsArray(
@@ -40,20 +44,53 @@ class raster2array (object):
                 y_size
             ).astype(raster_params["nptype"])
         else:
-            return self.np_array
+            if x_size is None:
+                _cols = self.cols
+            else:
+                _cols = x_size
 
-    def np_array_load(self, _force=False):
-        """
-        load numpy array to self class (Load  memory)
-        """
-        if self.np_array is None and not _force:
-            self.np_array = self.array()
+            if y_size is None:
+                _rows = self.rows
+            else:
+                _rows = y_size
 
-    def np_array_clean(self):
+            return self.np_array[
+                y_index:y_index+_rows,
+                x_index:x_index+_cols
+            ]
+
+    def get_std_dict(self, x_index=0, y_index=0, x_size=None, y_size=None):
         """
-        clean numpy array from self class (Clean  memory)
+        return standart dict for raster
         """
-        self.np_array = None
+        if x_index != 0 or y_index != 0:
+            UL_x, UL_y = self.get_index_coord(x_index, y_index)
+        else:
+            UL_x = self.TL_x
+            UL_y = self.TL_y
+
+        if x_size is not None:
+            _cols = x_size
+        else:
+            _cols = self.cols
+
+        if y_size is not None:
+            _rows = y_size
+        else:
+            _rows = self.rows
+        return {
+            "array": self.array(x_index, y_index, x_size, y_size),
+            "np": (_cols, _rows),
+            "transform": (
+                UL_x,
+                self.x_res,
+                self.x_diff,
+                UL_y,
+                self.y_diff,
+                self.y_res
+            ),
+            "projection": self.Projection,
+        }
 
     def get_coord_index(self, x, y):
         """
@@ -146,7 +183,14 @@ class raster2array (object):
         return {
             "array": rep_array,
             "np": (self.cols, self.rows),
-            "transform": (UL_x, _x_res, self.x_diff, UL_y, self.y_diff, _y_res),
+            "transform": (
+                UL_x,
+                _x_res,
+                self.x_diff,
+                UL_y,
+                self.y_diff,
+                _y_res
+            ),
             "projection": self.Projection,
         }
 
@@ -155,14 +199,9 @@ class raster2array (object):
         return value raster pixel (numpy array data) from coordinte
         """
         x_index, y_index = self.get_coord_index(x, y)
-        if self.np_array is None:
-            return float(
-                self.array(x_index, y_index, 1, 1)[0, 0]
-            )
-        else:
-            return float(
-                self.np_array[y_index, x_index]
-            )
+        return float(
+            self.array(x_index, y_index, 1, 1)[0, 0]
+        )
 
     def cut_area(self, *args):
         """
@@ -185,7 +224,14 @@ class raster2array (object):
         return {
             "array": self.array(UL_x_index, UL_y_index, x_size, y_size),
             "np": (x_size, y_size),
-            "transform": (UL_x, self.x_res, self.x_diff, UL_y, self.y_diff, self.y_res),
+            "transform": (
+                UL_x,
+                self.x_res,
+                self.x_diff,
+                UL_y,
+                self.y_diff,
+                self.y_res
+            ),
             "projection": self.Projection,
         }
 
@@ -220,11 +266,11 @@ class raster2array (object):
         layer = shp.GetLayerByIndex(shp_index)
         return self.cut_shp_layer(layer)
 
-    def cut_ogr_geometry(self, postgis_geom, _format="wkt"):
+    def cut_ogr_geometry(self, _geom, _format="wkt"):
         """
         Cut raster from ogr geometry:
-        postgis_geom = input geometry
-        _formati =:
+        _geom = input geometry
+        _format =:
             wkt - postgis geometry as ST_AsText() (DEFAULT)
             geojson
             gml
@@ -241,13 +287,13 @@ class raster2array (object):
         )
         # create geometry
         if _format.lower() == "wkt":
-            geom = ogr.CreateGeometryFromWkt(postgis_geom)
+            geom = ogr.CreateGeometryFromWkt(_geom)
         elif _format.lower() in ("geojson", "gjson", "json"):
-            geom = ogr.CreateGeometryFromJson(postgis_geom)
+            geom = ogr.CreateGeometryFromJson(_geom)
         elif _format.lower() == "gml":
-            geom = ogr.CreateGeometryFromGML(postgis_geom)
+            geom = ogr.CreateGeometryFromGML(_geom)
         elif _format.lower() == "wkb":
-            geom = ogr.CreateGeometryFromWkb(b64decode(postgis_geom))
+            geom = ogr.CreateGeometryFromWkb(b64decode(_geom))
         else:
             raise
         # create field
@@ -261,6 +307,19 @@ class raster2array (object):
         layer.CreateFeature(feature)
         feature = None
         return self.cut_shp_layer(layer)
+
+    def np_array_load(self):
+        """
+        load numpy array to self class (Load  memory)
+        """
+        if self.np_array is None:
+            self.np_array = self.array()
+
+    def np_array_clean(self):
+        """
+        clean numpy array from self class (Clean  memory)
+        """
+        self.np_array = None
 
     def __call__(self):
         return self.array()
