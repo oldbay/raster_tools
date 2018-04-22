@@ -24,7 +24,7 @@ class raster2array (object):
         self.cols = self.Ds.RasterXSize
         self.rows = self.Ds.RasterYSize
         self.bands = self.Ds.RasterCount
-        self.codage = gdal.GDT_Float64
+        self.codage = np.float64
         self.Band = self.Ds.GetRasterBand(_band)
         self.np_array = None
 
@@ -42,7 +42,7 @@ class raster2array (object):
                 y_index,
                 x_size,
                 y_size
-            ).astype(raster_params["nptype"])
+            ).astype(self.codage)
         else:
             if x_size is None:
                 _cols = self.cols
