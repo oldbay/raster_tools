@@ -1,0 +1,21 @@
+Source: raster-tools
+Section: python
+Priority: optional
+Maintainer: Baev Aleksandr <old_bay@mail.ru>
+Build-Depends: debhelper,
+               dh-python,
+               python-all,
+               python-setuptools,
+               python-gdal,
+               python-numpy
+Standards-Version: 3.9.5.0
+Homepage: https://github.com/oldbay/raster_tools
+X-Python-Version: 2.7
+
+Package: python-raster-tools
+Architecture: all
+Section: python
+Depends: ${misc:Depends},
+         python-gdal,
+         python-numpy
+Description: Raster tools.

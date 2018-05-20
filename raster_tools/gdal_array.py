@@ -8,6 +8,13 @@ from base64 import b64decode
 
 
 class raster2array (object):
+    """
+    stdict_div - division output standart dict (False/Int - div)
+                  for self.get_std_dict() & self.cut_area()
+    codage - type numpy array returned to mrthods this class 
+    """
+    stdict_div = False
+    codage = np.float64
 
     def __init__(self, fname, _band=1):
 
@@ -24,7 +31,6 @@ class raster2array (object):
         self.cols = self.Ds.RasterXSize
         self.rows = self.Ds.RasterYSize
         self.bands = self.Ds.RasterCount
-        self.codage = np.float64
         self.Band = self.Ds.GetRasterBand(_band)
         self.np_array = None
 
@@ -58,40 +64,7 @@ class raster2array (object):
                 y_index:y_index+_rows,
                 x_index:x_index+_cols
             ]
-
-    def get_std_dict(self, x_index=0, y_index=0, x_size=None, y_size=None):
-        """
-        return standart dict for raster
-        """
-        if x_index != 0 or y_index != 0:
-            UL_x, UL_y = self.get_index_coord(x_index, y_index)
-        else:
-            UL_x = self.TL_x
-            UL_y = self.TL_y
-
-        if x_size is not None:
-            _cols = x_size
-        else:
-            _cols = self.cols
-
-        if y_size is not None:
-            _rows = y_size
-        else:
-            _rows = self.rows
-        return {
-            "array": self.array(x_index, y_index, x_size, y_size),
-            "np": (_cols, _rows),
-            "transform": (
-                UL_x,
-                self.x_res,
-                self.x_diff,
-                UL_y,
-                self.y_diff,
-                self.y_res
-            ),
-            "projection": self.Projection,
-        }
-
+        
     def get_coord_index(self, x, y):
         """
         convert coordinate to numpy array index
@@ -127,6 +100,231 @@ class raster2array (object):
             y_index = 0
         y = float(self.TL_y + (y_index * self.y_res))
         return x, y
+
+    def get_pixel_value(self, x, y):
+        """
+        return value raster pixel (numpy array data) from coordinte
+        """
+        x_index, y_index = self.get_coord_index(x, y)
+        return float(
+            self.array(x_index, y_index, 1, 1)[0, 0]
+        )
+
+    def iter_div(self, x_index, y_index, x_size, y_size, coord_x, coord_y):
+        """
+        iteration vision function
+        """
+        rows = range(
+            0,
+            y_size,
+            int(y_size / self.stdict_div) + 1
+        )
+        cols = range(
+            0,
+            x_size,
+            int(x_size / self.stdict_div) + 1
+        )
+        for row in rows:
+            if rows.index(row) == len(rows) - 1:
+                row_end = y_size
+            else:
+                row_end = rows[rows.index(row) + 1]
+            for col in cols:
+                if cols.index(col) == len(cols) - 1:
+                    col_end = x_size
+                else:
+                    col_end = cols[cols.index(col) + 1]
+
+                yield {
+                    "array": self.array(
+                        col+x_index, 
+                        row+y_index,
+                        col_end-col,
+                        row_end-row
+                        ),
+                    "div": (row, row_end, col, col_end),
+                    "shape": (y_size, x_size),
+                    "transform": (
+                        coord_x,
+                        self.x_res,
+                        self.x_diff,
+                        coord_y,
+                        self.y_diff,
+                        self.y_res
+                    ),
+                    "projection": self.Projection,
+                }
+                
+    def get_std_dict(self, x_index=0, y_index=0, x_size=None, y_size=None):
+        """
+        return standart dict for raster
+        """
+        if x_index != 0 or y_index != 0:
+            UL_x, UL_y = self.get_index_coord(x_index, y_index)
+        else:
+            UL_x = self.TL_x
+            UL_y = self.TL_y
+
+        if x_size is not None:
+            _cols = x_size
+        else:
+            _cols = self.cols
+
+        if y_size is not None:
+            _rows = y_size
+        else:
+            _rows = self.rows
+       
+        # output
+        if self.stdict_div:
+            return self.iter_div(x_index, y_index, _cols, _rows, UL_x, UL_y)
+        else:
+            return {
+                "array": self.array(x_index, y_index, x_size, y_size),
+                "shape": (_rows, _cols),
+                "transform": (
+                    UL_x,
+                    self.x_res,
+                    self.x_diff,
+                    UL_y,
+                    self.y_diff,
+                    self.y_res
+                ),
+                "projection": self.Projection,
+            }
+        
+    def cut_area(self, *args):
+        """
+        cut raster from more point coordinates
+        args = [(x1,y1),(x2,y2),(xn,yn)] or (x1,y1),(x2,y2),(xn,yn)
+        return to input array2raster class
+        """
+        if len(args) == 1 and type(args[0]) is list:
+            args = args[0]
+        x_array = [float(my[0]) for my in args]
+        y_array = [float(my[1]) for my in args]
+        UL_x = min(x_array)
+        UL_y = max(y_array)
+        LR_x = max(x_array)
+        LR_y = min(y_array)
+        UL_x_index, UL_y_index = self.get_coord_index(UL_x, UL_y)
+        LR_x_index, LR_y_index = self.get_coord_index(LR_x, LR_y)
+        x_size = LR_x_index - UL_x_index + 1
+        y_size = LR_y_index - UL_y_index + 1
+        return self.get_std_dict(UL_x_index, UL_y_index, x_size, y_size)
+
+    def cut_shp_layer(self, layer):
+        """
+        Cut raster from bbox shp layer
+        layer = ogr object laer
+        return to input array2raster class
+        """
+        # reprojection layer
+        layer_prj = layer.GetSpatialRef()
+        raster_prj = osr.SpatialReference(wkt=self.Projection)
+        if layer_prj != raster_prj:
+            # BAD transform: sometimes incorect coordinates to reprojection - next testing
+            transform = osr.CoordinateTransformation(layer_prj, raster_prj)
+            drv = ogr.GetDriverByName("MEMORY")
+            # create new vector layer
+            source = drv.CreateDataSource('memData')
+            out_layer = source.CreateLayer(
+                'memData',
+                geom_type=ogr.wkbPolygon,
+                srs=raster_prj
+            )
+            # create field
+            field = ogr.FieldDefn("mem", ogr.OFTString)
+            out_layer.CreateField(field)
+            # create feature
+            for in_feature in layer:
+                # transformed in feature
+                transformed = in_feature.GetGeometryRef()
+                transformed.Transform(transform)
+                # creae out fature
+                featureDefn = out_layer.GetLayerDefn()
+                out_feature = ogr.Feature(featureDefn)
+                out_feature.SetGeometry(transformed)
+                out_feature.SetField("mem", "mem")
+                out_layer.CreateFeature(out_feature)
+                out_feature = None
+            layer = out_layer
+    
+        x1, x2, y1, y2 = layer.GetExtent()
+        if self.stdict_div:
+            return self.cut_area((x1, y1), (x2, y2))
+        else:
+            cut_area = self.cut_area((x1, y1), (x2, y2))
+            # rasterize layer mask
+            shp_raster = array2raster(None, cut_area)
+            gdal.RasterizeLayer(shp_raster.Ds, [1], layer, burn_values=[1])
+            shp_cut_array = np.where(
+                shp_raster.array() == 1, cut_area["array"], 0
+            )
+            return {
+                "array": shp_cut_array,
+                "shape": cut_area["shape"],
+                "transform": cut_area["transform"],
+                "projection": self.Projection,
+            }
+
+    def cut_shp_file(self, shp_file, shp_index=0):
+        """
+        Cut raster from bbox shape file
+        shp_file = shapefile name
+        shp_index = index layer from index
+        return to input array2raster class
+        """
+        shp = ogr.Open(shp_file)
+        layer = shp.GetLayerByIndex(shp_index)
+        return self.cut_shp_layer(layer)
+
+    def cut_ogr_geometry(self, _geom, _format="wkt", _geom_proj=None):
+        """
+        Cut raster from ogr polygon geometry:
+        _geom = input geometry
+        _format =:
+            wkt - postgis geometry as ST_AsText() (DEFAULT)
+            geojson
+            gml
+            wkb
+        _geom_proj = None or projection in format osr.SpatialReference 
+        return to input array2raster class
+        """
+        # crete vector in memory
+        drv = ogr.GetDriverByName("MEMORY")
+        source = drv.CreateDataSource('memData')
+        if _geom_proj is None:
+            srs_layer =  osr.SpatialReference(wkt=self.Projection)
+        else:
+            srs_layer = _geom_proj
+        layer = source.CreateLayer(
+            'memData',
+            geom_type=ogr.wkbPolygon,
+            srs=srs_layer
+        )
+        # create geometry
+        if _format.lower() == "wkt":
+            geom = ogr.CreateGeometryFromWkt(_geom)
+        elif _format.lower() in ("geojson", "gjson", "json"):
+            geom = ogr.CreateGeometryFromJson(_geom)
+        elif _format.lower() == "gml":
+            geom = ogr.CreateGeometryFromGML(_geom)
+        elif _format.lower() == "wkb":
+            geom = ogr.CreateGeometryFromWkb(b64decode(_geom))
+        else:
+            raise
+        # create field
+        field = ogr.FieldDefn("mem", ogr.OFTString)
+        layer.CreateField(field)
+        # create feature
+        featureDefn = layer.GetLayerDefn()
+        feature = ogr.Feature(featureDefn)
+        feature.SetGeometry(geom)
+        feature.SetField("mem", "mem")
+        layer.CreateFeature(feature)
+        feature = None
+        return self.cut_shp_layer(layer)
 
     def is_valid(self):
         """
@@ -182,7 +380,7 @@ class raster2array (object):
         # Fin
         return {
             "array": rep_array,
-            "np": (self.cols, self.rows),
+            "shape": (self.rows, self.cols),
             "transform": (
                 UL_x,
                 _x_res,
@@ -193,120 +391,6 @@ class raster2array (object):
             ),
             "projection": self.Projection,
         }
-
-    def get_pixel_value(self, x, y):
-        """
-        return value raster pixel (numpy array data) from coordinte
-        """
-        x_index, y_index = self.get_coord_index(x, y)
-        return float(
-            self.array(x_index, y_index, 1, 1)[0, 0]
-        )
-
-    def cut_area(self, *args):
-        """
-        cut raster from more point coordinates
-        args = [(x1,y1),(x2,y2),(xn,yn)] or (x1,y1),(x2,y2),(xn,yn)
-        return to input array2raster class
-        """
-        if len(args) == 1 and type(args[0]) is list:
-            args = args[0]
-        x_array = [float(my[0]) for my in args]
-        y_array = [float(my[1]) for my in args]
-        UL_x = min(x_array)
-        UL_y = max(y_array)
-        LR_x = max(x_array)
-        LR_y = min(y_array)
-        UL_x_index, UL_y_index = self.get_coord_index(UL_x, UL_y)
-        LR_x_index, LR_y_index = self.get_coord_index(LR_x, LR_y)
-        x_size = LR_x_index - UL_x_index + 1
-        y_size = LR_y_index - UL_y_index + 1
-        return {
-            "array": self.array(UL_x_index, UL_y_index, x_size, y_size),
-            "np": (x_size, y_size),
-            "transform": (
-                UL_x,
-                self.x_res,
-                self.x_diff,
-                UL_y,
-                self.y_diff,
-                self.y_res
-            ),
-            "projection": self.Projection,
-        }
-
-    def cut_shp_layer(self, layer):
-        """
-        Cut raster from bbox shp layer
-        layer = ogr object laer
-        return to input array2raster class
-        """
-        x1, x2, y1, y2 = layer.GetExtent()
-        cut_area = self.cut_area((x1, y1), (x2, y2))
-        shp_raster = array2raster(None, cut_area)
-        gdal.RasterizeLayer(shp_raster.Ds, [1], layer, burn_values=[1])
-        shp_cut_array = np.where(
-            shp_raster.array() == 1, cut_area["array"], 0
-        )
-        return {
-            "array": shp_cut_array,
-            "np": cut_area["np"],
-            "transform": cut_area["transform"],
-            "projection": self.Projection,
-        }
-
-    def cut_shp_file(self, shp_file, shp_index=0):
-        """
-        Cut raster from bbox shape file
-        shp_file = shapefile name
-        shp_index = index layer from index
-        return to input array2raster class
-        """
-        shp = ogr.Open(shp_file)
-        layer = shp.GetLayerByIndex(shp_index)
-        return self.cut_shp_layer(layer)
-
-    def cut_ogr_geometry(self, _geom, _format="wkt"):
-        """
-        Cut raster from ogr geometry:
-        _geom = input geometry
-        _format =:
-            wkt - postgis geometry as ST_AsText() (DEFAULT)
-            geojson
-            gml
-            wkb
-        return to input array2raster class
-        """
-        # crete vector in memory
-        drv = ogr.GetDriverByName("MEMORY")
-        source = drv.CreateDataSource('memData')
-        layer = source.CreateLayer(
-            'memData',
-            geom_type=ogr.wkbPolygon,
-            srs=osr.SpatialReference(wkt=self.Projection)
-        )
-        # create geometry
-        if _format.lower() == "wkt":
-            geom = ogr.CreateGeometryFromWkt(_geom)
-        elif _format.lower() in ("geojson", "gjson", "json"):
-            geom = ogr.CreateGeometryFromJson(_geom)
-        elif _format.lower() == "gml":
-            geom = ogr.CreateGeometryFromGML(_geom)
-        elif _format.lower() == "wkb":
-            geom = ogr.CreateGeometryFromWkb(b64decode(_geom))
-        else:
-            raise
-        # create field
-        field = ogr.FieldDefn("mem", ogr.OFTString)
-        layer.CreateField(field)
-        # create feature
-        featureDefn = layer.GetLayerDefn()
-        feature = ogr.Feature(featureDefn)
-        feature.SetGeometry(geom)
-        feature.SetField("mem", "mem")
-        layer.CreateFeature(feature)
-        feature = None
-        return self.cut_shp_layer(layer)
 
     def np_array_load(self):
         """
@@ -328,12 +412,12 @@ class raster2array (object):
         self.Ds = None
 
 
-class array2raster(object):
+class array2raster(raster2array):
 
     def __init__(self, _raster, _array, _fname=False, _band=1, _drv=False, _nodata=None):
         """
         _raster = oject to raster2array OR None
-        _array = np.array OR dict of return raster2array.cut_area()
+        _array = np.array OR standart dict
         _fname = filename OR False for use memory OR None
         _band = number of band
         _drv = driver raster file
@@ -346,8 +430,8 @@ class array2raster(object):
         # image size and tiles
         if type(_array) is dict:
             self.GeoTransform = _array["transform"]
-            self.cols = _array["np"][0]
-            self.rows = _array["np"][1]
+            self.rows = _array["shape"][0]
+            self.cols = _array["shape"][1]
             self.Projection = _array["projection"]
             _array = _array["array"]
         elif type(_array) is not dict and _raster is not None:
@@ -359,24 +443,34 @@ class array2raster(object):
                 _array = _raster.array()
         else:
             raise
-        self.codage = gdal.GDT_Float64
+        self.raster_codage = gdal.GDT_Float64
         drv = gdal.GetDriverByName(self.drvname)
         self.Ds = drv.Create(self.fname,
                              self.cols,
                              self.rows,
                              1,
-                             self.codage,
+                             self.raster_codage,
                              options=self._gdal_opts)
         self.Ds.SetGeoTransform(self.GeoTransform)
         self.Ds.SetProjection(self.Projection)
         self.Band = self.Ds.GetRasterBand(_band)
-        self.Band.WriteArray(_array)
+        if _array is not None:
+            self.Band.WriteArray(_array)
         self.Band.FlushCache()
         if _nodata is not None:
             self.Band.SetNoDataValue(_nodata)
-
-    def array(self):
-        return self.Band.ReadAsArray().astype(raster_params["nptype"])
+        # init rastre2array vars
+        self.GeoTransform = self.Ds.GetGeoTransform()
+        self.TL_x = float(self.GeoTransform[0])
+        self.x_res = float(self.GeoTransform[1])
+        self.x_diff = float(self.GeoTransform[2])
+        self.TL_y = float(self.GeoTransform[3])
+        self.y_res = float(self.GeoTransform[5])
+        self.y_diff = float(self.GeoTransform[4])
+        self.cols = self.Ds.RasterXSize
+        self.rows = self.Ds.RasterYSize
+        self.bands = self.Ds.RasterCount
+        self.np_array = None
 
     def _gdal_test(self):
         if (not self.fname and not self.drvname) or (not self.fname and self.drvname):
@@ -389,6 +483,22 @@ class array2raster(object):
             return GDAL_OPTS[self.drvname]
         else:
             return GDAL_OPTS['all']
+
+    # overloading methods for use in raster2calc
+    def get_std_dict(self, *args, **kwargs):
+        return raster2array.get_std_dict(self, *args, **kwargs)
+
+    def cut_area(self, *args, **kwargs):
+        return raster2array.cut_area(self, *args, **kwargs)
+
+    def cut_shp_layer(self, *args, **kwargs):
+        return raster2array.cut_shp_layer(self, *args, **kwargs)
+
+    def cut_shp_file(self, *args, **kwargs):
+        return raster2array.cut_shp_file(self, *args, **kwargs)
+
+    def cut_ogr_geometry(self, *args, **kwargs):
+        return raster2array.cut_ogr_geometry(self, *args, **kwargs)
 
     def __call__(self):
         return self.Band
@@ -406,118 +516,197 @@ class array2raster(object):
         self.Ds = None
 
 
-class raster2multi (object):
-
-    def __init__(self, _fname, *args):
+class raster2transform(raster2array):
+    
+    def __init__(self, _input, _cols, _rows, _proj=None):
         """
-        args = list objets form array2raster or raster2array (band 1 only)
-        args[-1] = drvname or default GTiff
+        _input is stdict (memory hight)
+        _input is filename raster file (memory midi)
+        _input is object raster2array (memory low)
         """
-        self.fname = _fname
-        if type(args[0]) is list:
-            self.ext_rasters = args[0]
+        if type(_input) is str:
+            self.raster = raster2array(_input)
+        elif type(_input) is dict:
+            self.raster = array2raster(None, _input)
         else:
-            self.ext_rasters = args
-        if type(args[-1]) == str:
-            self.drvname = args[-1]
+            self.raster = _input
+        self.cols = _cols
+        self.rows = _rows
+        if _proj is None:
+            self.Projection = self.raster.Projection
         else:
-            self.drvname = "GTiff"
-        # image size and tiles
-        self.GeoTransform = self.ext_rasters[0].GeoTransform
-        self.cols = self.ext_rasters[0].cols
-        self.rows = self.ext_rasters[0].rows
-        self.Projection = self.ext_rasters[0].Projection
-        self.codage = self.ext_rasters[0].codage
-        self._gdal_opts = self._gdal_test()
-        drv = gdal.GetDriverByName(self.drvname)
-        self.Ds = drv.Create(self.fname,
-                             self.cols,
-                             self.rows,
-                             len(self.ext_rasters),
-                             self.codage,
-                             options=self._gdal_opts)
-        self.Ds.SetGeoTransform(self.GeoTransform)
-        self.Ds.SetProjection(self.Projection)
-        self.add_bands()
+            self.Projection = _proj
+        self.transform()
 
-    def add_bands(self):
-        _def_params = [
-            self.GeoTransform,
-            self.cols,
-            self.rows,
-            self.Projection,
-            self.codage,
-        ]
-        band_num = 1
-        for _raster in self.ext_rasters:
-            if type(_raster) != type(self.ext_rasters[0]):
-                continue
-            _raster_params = [
-                _raster.GeoTransform,
-                _raster.cols,
-                _raster.rows,
-                _raster.Projection,
-                _raster.codage,
-            ]
-            if _raster_params == _def_params:
-                band = self.Ds.GetRasterBand(band_num)
-                band.WriteArray(_raster.array())
-                band = None
-            band_num += 1
+    def transform(self):
+        # input params
+        _cols = self.raster.cols
+        _rows = self.raster.rows
+        _GeoTransform = self.raster.GeoTransform
+        _TL_x = float(_GeoTransform[0])
+        _x_res = float(_GeoTransform[1])
+        _x_diff = float(_GeoTransform[2])
+        _TL_y = float(_GeoTransform[3])
+        _y_res = float(_GeoTransform[5])
+        _y_diff = float(_GeoTransform[4])
+        # transform parms
+        UL_x = _TL_x
+        x_res = float((_x_res * _cols) / self.cols)
+        x_diff = _x_diff
+        UL_y = _TL_y
+        y_diff = _y_diff
+        y_res = float((_y_res * _rows) / self.rows)
+        # create transform raster
+        t_raster = array2raster(
+            None,
+            {
+                "array": None, 
+                #"array": np.zeros((self.rows, self.cols)), 
+                "shape": (self.rows, self.cols),
+                "transform": (
+                    UL_x,
+                    x_res,
+                    x_diff,
+                    UL_y,
+                    y_diff,
+                    y_res
+                ),
+                "projection": self.Projection,
+            }
+        )
+        # transformation
+        gdal.RegenerateOverviews(
+            self.raster.Band,
+            [t_raster.Band],
+            'mode'
+        )
+        # reinit new value
+        self.Ds = t_raster.Ds
+        self.GeoTransform = self.Ds.GetGeoTransform()
+        self.TL_x = float(self.GeoTransform[0])
+        self.x_res = float(self.GeoTransform[1])
+        self.x_diff = float(self.GeoTransform[2])
+        self.TL_y = float(self.GeoTransform[3])
+        self.y_res = float(self.GeoTransform[5])
+        self.y_diff = float(self.GeoTransform[4])
+        self.Projection = self.Ds.GetProjection()
+        self.cols = self.Ds.RasterXSize
+        self.rows = self.Ds.RasterYSize
+        self.bands = self.Ds.RasterCount
+        self.Band = self.Ds.GetRasterBand(1)
+        self.np_array = None
+        self.raster = None
 
-    def _gdal_test(self):
-        if self.drvname in GDAL_OPTS.keys():
-            return GDAL_OPTS[self.drvname]
-        else:
-            return GDAL_OPTS['all']
+    def save(self, _fname):
+        array2raster(self, None, _fname)
+        
+    # overloading methods for use in raster2calc
+    def get_std_dict(self, *args, **kwargs):
+        return raster2array.get_std_dict(self, *args, **kwargs)
 
-    def __del__(self):
-        self.Ds = None
+    def cut_area(self, *args, **kwargs):
+        return raster2array.cut_area(self, *args, **kwargs)
+
+    def cut_shp_layer(self, *args, **kwargs):
+        return raster2array.cut_shp_layer(self, *args, **kwargs)
+
+    def cut_shp_file(self, *args, **kwargs):
+        return raster2array.cut_shp_file(self, *args, **kwargs)
+
+    def cut_ogr_geometry(self, *args, **kwargs):
+        return raster2array.cut_ogr_geometry(self, *args, **kwargs)
 
 
-class repair2reload (object):
-    """
-    test and reload raster of enside out
-    this class is load memory!!!
-    """
-
-    def __init__(self, in_fname, out_fname=None, _drv="GTiff"):
+class raster2calc(object):
+    
+    def __init__(self, _div = 100):
         """
-        in_fname = file name input raster
-        out_fname = file name output raster, if None - to reload input raster
-        _drv = driver raster file
+        _div = division raster
         """
-        self.in_fname = in_fname
-        if out_fname is None:
-            self.out_fname = in_fname
-        else:
-            self.out_fname = out_fname
-        self.drvname = _drv
-        self.repair()
-
-    def repair(self):
-        self.repair_bands = []
-        band_first = raster2array(self.in_fname, 1)
-        if False in band_first.is_valid():
-            bands_count = band_first.Ds.RasterCount
-            for _next in range(bands_count):
-                band_num = _next + 1
-                if band_num == 1:
-                    self.repair_bands.append(
-                        array2raster(
-                            None,
-                            band_first.repair()
-                        )
-                    )
-                    del(band_first)
+        self.div = _div
+    
+    def calc_div(_method):
+        # decorator for calculation division data
+        def wrapper(self, math_fc, *args, **kwargs):
+            """
+            math_fc = lambda a, b: a + b
+            *args = args for rastre2array.get_std_dict
+            **kwargs = variables for lambda: a=1, b=2
+            format lambda variables:
+                stdict (memory hight)
+                filename raster file (memory midi)
+                object raster2array (memory low)
+            """
+            
+            # convert lambda variables
+            lambda_vars = []
+            for key, value in kwargs.items():
+                if type(value) is str:
+                    kwargs[key] = raster2array(value)
+                elif type(value) is dict:
+                    kwargs[key] = array2raster(None, value)
+                # create new variable in object for iteration method
+                kwargs[key].stdict_div = self.div
+                kwargs[key].divs = kwargs[key].__class__.__dict__[_method.__name__](
+                    kwargs[key], *args
+                ) 
+                    
+                if lambda_vars == []:
+                    lambda_vars.append(key)
+                    lambda_cols = kwargs[key].cols
+                    lambda_rows = kwargs[key].rows
                 else:
-                    self.repair_bands.append(
-                        array2raster(
-                            None,
-                            raster2array(self.in_fname, band_num).repair()
-                        )
-                    )
+                    if kwargs[key].cols != lambda_cols or kwargs[key].rows != lambda_rows:
+                        raise
+                    else:
+                        lambda_vars.append(key)
+                    
+            # calculation
+            new_kwags = {}
+            start_status = True
+            while True:
+                try:
+                    for key in lambda_vars:
+                        new_kwags[key] = kwargs[key].divs.next()
+                        _div = new_kwags[key]["div"]
+                        if start_status:
+                            _shape = new_kwags[key]["shape"]
+                            _transform = new_kwags[key]["transform"]
+                            _projection = new_kwags[key]["projection"]
+                            calc_array = np.zeros(_shape)
+                            start_status = False
+                        new_kwags[key] = new_kwags[key]["array"]
+                except StopIteration:
+                    break
+                else:
+                    calc_array[_div[0]:_div[1], _div[2]:_div[3]] = math_fc(**new_kwags)    
+            return {
+                "array": calc_array,
+                "shape": _shape,
+                "transform": _transform, 
+                "projection": _projection,
+            }
+        return wrapper
+   
+    @calc_div 
+    def get_std_dict(self, math_fc, *args, **kwargs):
+        pass
+    
+    @calc_div 
+    def cut_area(self, math_fc, *args, **kwargs):
+        pass
 
-    def __del__(self):
-        if self.repair_bands != []:
-            raster2multi(self.out_fname, self.repair_bands, self.drvname)
+    @calc_div 
+    def cut_shp_layer(self, math_fc, *args, **kwargs):
+        pass
+
+    @calc_div 
+    def cut_shp_file(self, math_fc, *args, **kwargs):
+        pass
+
+    @calc_div 
+    def cut_ogr_geometry(self, math_fc, *args, **kwargs):
+        pass
+    
+    def __call__(self, math_fc, *args, **kwargs):
+        return self.get_std_dict(math_fc, *args, **kwargs)
