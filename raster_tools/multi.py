@@ -222,6 +222,9 @@ class multiarray2multiraster(object):
    
     def __call__(self):
         self.save()
+        
+    def __del__(self):
+        self.save()
     
 
 class repair2reload (object):
