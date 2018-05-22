@@ -11,7 +11,7 @@ class raster2array (object):
     """
     stdict_div - division output standart dict (False/Int - div)
                   for self.get_std_dict() & self.cut_area()
-    codage - type numpy array returned to mrthods this class 
+    codage - type numpy array returned to mrthods this class
     """
     stdict_div = False
     codage = np.float64
@@ -64,7 +64,7 @@ class raster2array (object):
                 y_index:y_index+_rows,
                 x_index:x_index+_cols
             ]
-        
+
     def get_coord_index(self, x, y):
         """
         convert coordinate to numpy array index
@@ -137,7 +137,7 @@ class raster2array (object):
 
                 yield {
                     "array": self.array(
-                        col+x_index, 
+                        col+x_index,
                         row+y_index,
                         col_end-col,
                         row_end-row
@@ -154,7 +154,7 @@ class raster2array (object):
                     ),
                     "projection": self.Projection,
                 }
-                
+
     def get_std_dict(self, x_index=0, y_index=0, x_size=None, y_size=None):
         """
         return standart dict for raster
@@ -174,7 +174,7 @@ class raster2array (object):
             _rows = y_size
         else:
             _rows = self.rows
-       
+
         # output
         if self.stdict_div:
             return self.iter_div(x_index, y_index, _cols, _rows, UL_x, UL_y)
@@ -192,7 +192,7 @@ class raster2array (object):
                 ),
                 "projection": self.Projection,
             }
-        
+
     def cut_area(self, *args):
         """
         cut raster from more point coordinates
@@ -249,7 +249,7 @@ class raster2array (object):
                 out_layer.CreateFeature(out_feature)
                 out_feature = None
             layer = out_layer
-    
+
         x1, x2, y1, y2 = layer.GetExtent()
         if self.stdict_div:
             return self.cut_area((x1, y1), (x2, y2))
@@ -288,7 +288,7 @@ class raster2array (object):
             geojson
             gml
             wkb
-        _geom_proj = None or projection in format osr.SpatialReference 
+        _geom_proj = None or projection in format osr.SpatialReference
         return to input array2raster class
         """
         # crete vector in memory
@@ -517,8 +517,8 @@ class array2raster(raster2array):
 
 
 class raster2transform(raster2array):
-    
-    def __init__(self, _input, _cols, _rows, _proj=None):
+
+    def __init__(self, _input, _rows, _cols, _proj=None):
         """
         _input is stdict (memory hight)
         _input is filename raster file (memory midi)
@@ -530,8 +530,8 @@ class raster2transform(raster2array):
             self.raster = array2raster(None, _input)
         else:
             self.raster = _input
-        self.cols = _cols
         self.rows = _rows
+        self.cols = _cols
         if _proj is None:
             self.Projection = self.raster.Projection
         else:
@@ -560,8 +560,8 @@ class raster2transform(raster2array):
         t_raster = array2raster(
             None,
             {
-                "array": None, 
-                #"array": np.zeros((self.rows, self.cols)), 
+                "array": None,
+                #"array": np.zeros((self.rows, self.cols)),
                 "shape": (self.rows, self.cols),
                 "transform": (
                     UL_x,
@@ -599,7 +599,7 @@ class raster2transform(raster2array):
 
     def save(self, _fname):
         array2raster(self, None, _fname)
-        
+
     # overloading methods for use in raster2calc
     def get_std_dict(self, *args, **kwargs):
         return raster2array.get_std_dict(self, *args, **kwargs)
@@ -618,13 +618,13 @@ class raster2transform(raster2array):
 
 
 class raster2calc(object):
-    
+
     def __init__(self, _div = 100):
         """
         _div = division raster
         """
         self.div = _div
-    
+
     def calc_div(_method):
         # decorator for calculation division data
         def wrapper(self, math_fc, *args, **kwargs):
@@ -637,7 +637,7 @@ class raster2calc(object):
                 filename raster file (memory midi)
                 object raster2array (memory low)
             """
-            
+
             # convert lambda variables
             lambda_vars = []
             for key, value in kwargs.items():
@@ -649,8 +649,8 @@ class raster2calc(object):
                 kwargs[key].stdict_div = self.div
                 kwargs[key].divs = kwargs[key].__class__.__dict__[_method.__name__](
                     kwargs[key], *args
-                ) 
-                    
+                )
+
                 if lambda_vars == []:
                     lambda_vars.append(key)
                     lambda_cols = kwargs[key].cols
@@ -660,7 +660,7 @@ class raster2calc(object):
                         raise
                     else:
                         lambda_vars.append(key)
-                    
+
             # calculation
             new_kwags = {}
             start_status = True
@@ -679,34 +679,34 @@ class raster2calc(object):
                 except StopIteration:
                     break
                 else:
-                    calc_array[_div[0]:_div[1], _div[2]:_div[3]] = math_fc(**new_kwags)    
+                    calc_array[_div[0]:_div[1], _div[2]:_div[3]] = math_fc(**new_kwags)
             return {
                 "array": calc_array,
                 "shape": _shape,
-                "transform": _transform, 
+                "transform": _transform,
                 "projection": _projection,
             }
         return wrapper
-   
-    @calc_div 
+
+    @calc_div
     def get_std_dict(self, math_fc, *args, **kwargs):
         pass
-    
-    @calc_div 
+
+    @calc_div
     def cut_area(self, math_fc, *args, **kwargs):
         pass
 
-    @calc_div 
+    @calc_div
     def cut_shp_layer(self, math_fc, *args, **kwargs):
         pass
 
-    @calc_div 
+    @calc_div
     def cut_shp_file(self, math_fc, *args, **kwargs):
         pass
 
-    @calc_div 
+    @calc_div
     def cut_ogr_geometry(self, math_fc, *args, **kwargs):
         pass
-    
+
     def __call__(self, math_fc, *args, **kwargs):
         return self.get_std_dict(math_fc, *args, **kwargs)
