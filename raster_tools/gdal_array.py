@@ -640,26 +640,36 @@ class raster2calc(object):
 
             # convert lambda variables
             lambda_vars = []
+            lambda_cols = None
+            lambda_rows = None
+            valid_class = (array2raster, raster2array, raster2transform)
             for key, value in kwargs.items():
+
+                # convert str and dict to valid class
                 if type(value) is str:
                     kwargs[key] = raster2array(value)
                 elif type(value) is dict:
                     kwargs[key] = array2raster(None, value)
-                # create new variable in object for iteration method
-                kwargs[key].stdict_div = self.div
-                kwargs[key].divs = kwargs[key].__class__.__dict__[_method.__name__](
-                    kwargs[key], *args
-                )
 
-                if lambda_vars == []:
-                    lambda_vars.append(key)
-                    lambda_cols = kwargs[key].cols
-                    lambda_rows = kwargs[key].rows
-                else:
-                    if kwargs[key].cols != lambda_cols or kwargs[key].rows != lambda_rows:
-                        raise
-                    else:
+                # test object to valid classes
+                if isinstance(kwargs[key], valid_class):
+                    # create new variable in object for iteration method
+                    kwargs[key].stdict_div = self.div
+                    kwargs[key].divs = kwargs[key].__class__.__dict__[_method.__name__](
+                        kwargs[key], *args
+                    )
+
+                    if lambda_cols is None and lambda_rows is None:
                         lambda_vars.append(key)
+                        lambda_cols = kwargs[key].cols
+                        lambda_rows = kwargs[key].rows
+                    else:
+                        if kwargs[key].cols != lambda_cols or kwargs[key].rows != lambda_rows:
+                            raise
+                        else:
+                            lambda_vars.append(key)
+                else:
+                    lambda_vars.append(key)
 
             # calculation
             new_kwags = {}
@@ -667,15 +677,19 @@ class raster2calc(object):
             while True:
                 try:
                     for key in lambda_vars:
-                        new_kwags[key] = kwargs[key].divs.next()
-                        _div = new_kwags[key]["div"]
-                        if start_status:
-                            _shape = new_kwags[key]["shape"]
-                            _transform = new_kwags[key]["transform"]
-                            _projection = new_kwags[key]["projection"]
-                            calc_array = np.zeros(_shape)
-                            start_status = False
-                        new_kwags[key] = new_kwags[key]["array"]
+                        # test object to valid classes
+                        if isinstance(kwargs[key], valid_class):
+                            new_kwags[key] = kwargs[key].divs.next()
+                            _div = new_kwags[key]["div"]
+                            if start_status:
+                                _shape = new_kwags[key]["shape"]
+                                _transform = new_kwags[key]["transform"]
+                                _projection = new_kwags[key]["projection"]
+                                calc_array = np.zeros(_shape)
+                                start_status = False
+                            new_kwags[key] = new_kwags[key]["array"]
+                        else:
+                            new_kwags[key] = kwargs[key]
                 except StopIteration:
                     break
                 else:
