@@ -1,6 +1,10 @@
 #!/usr/bin/python2
 # -*- coding: utf-8 -*-
 
+from vector_ops import (
+    proj_conv,
+    geom_conv
+)
 from gdal_array import (
     raster2array,
     array2raster,

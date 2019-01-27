@@ -1,14 +1,17 @@
 #!/usr/bin/python2
 # -*- coding: utf-8 -*-
 
-from osgeo import gdal, ogr, osr
+from osgeo import gdal
 import numpy as np
 from config import GDAL_OPTS, raster_params, echo_output
+from vector_ops import proj_conv, geom_conv
 from base64 import b64decode
 
 
-class raster2array (object):
+class raster2array (geom_conv):
     """
+    Class raster to array function
+    
     stdict_div - division output standart dict (False/Int - div)
                   for self.get_std_dict() & self.cut_area()
     codage - type numpy array returned to mrthods this class
@@ -193,6 +196,7 @@ class raster2array (object):
                 "projection": self.Projection,
             }
 
+
     def cut_area(self, *args):
         """
         cut raster from more point coordinates
@@ -213,51 +217,23 @@ class raster2array (object):
         y_size = LR_y_index - UL_y_index + 1
         return self.get_std_dict(UL_x_index, UL_y_index, x_size, y_size)
 
-    def cut_shp_layer(self, layer):
+    def cut_shp_layer(self, layer=None):
         """
         Cut raster from bbox shp layer
         layer = ogr object laer
         return to input array2raster class
         """
-        # reprojection layer
-        layer_prj = layer.GetSpatialRef()
-        raster_prj = osr.SpatialReference(wkt=self.Projection)
-        if layer_prj != raster_prj:
-            # BAD transform: sometimes incorect coordinates to reprojection - next testing
-            transform = osr.CoordinateTransformation(layer_prj, raster_prj)
-            drv = ogr.GetDriverByName("MEMORY")
-            # create new vector layer
-            source = drv.CreateDataSource('memData')
-            out_layer = source.CreateLayer(
-                'memData',
-                geom_type=ogr.wkbPolygon,
-                srs=raster_prj
-            )
-            # create field
-            field = ogr.FieldDefn("mem", ogr.OFTString)
-            out_layer.CreateField(field)
-            # create feature
-            for in_feature in layer:
-                # transformed in feature
-                transformed = in_feature.GetGeometryRef()
-                transformed.Transform(transform)
-                # creae out fature
-                featureDefn = out_layer.GetLayerDefn()
-                out_feature = ogr.Feature(featureDefn)
-                out_feature.SetGeometry(transformed)
-                out_feature.SetField("mem", "mem")
-                out_layer.CreateFeature(out_feature)
-                out_feature = None
-            layer = out_layer
-
-        x1, x2, y1, y2 = layer.GetExtent()
+        if layer is not None:
+            self.Layer = layer
+            self.layer_reproj()
+        x1, x2, y1, y2 = self.get_layer_extent()
         if self.stdict_div:
             return self.cut_area((x1, y1), (x2, y2))
         else:
             cut_area = self.cut_area((x1, y1), (x2, y2))
             # rasterize layer mask
             shp_raster = array2raster(None, cut_area)
-            gdal.RasterizeLayer(shp_raster.Ds, [1], layer, burn_values=[1])
+            gdal.RasterizeLayer(shp_raster.Ds, [1], self.Layer, burn_values=[1])
             shp_cut_array = np.where(
                 shp_raster.array() == 1, cut_area["array"], 0
             )
@@ -268,63 +244,44 @@ class raster2array (object):
                 "projection": self.Projection,
             }
 
-    def cut_shp_file(self, shp_file, shp_index=0):
+    def cut_shp_file(self, *args, **kwargs):
         """
         Cut raster from bbox shape file
-        shp_file = shapefile name
-        shp_index = index layer from index
+        
+        paramets for self.shp_file2layer
+        ----------------------
+        [0]shp_file = shapefile name
+        [1]shp_index = index layer from index
+        [2]_proj(describle) = None or projection in format: 
+                str:WKT, int:EPSG, dict:{'proj_type':'proj_data'}
         return to input array2raster class
         """
-        shp = ogr.Open(shp_file)
-        layer = shp.GetLayerByIndex(shp_index)
-        return self.cut_shp_layer(layer)
+        self.shp_file2layer(*args, **kwargs)
+        return self.cut_shp_layer()
 
-    def cut_ogr_geometry(self, _geom, _format="wkt", _geom_proj=None):
+    def cut_ogr_geometry(self, *args, **kwargs):
         """
         Cut raster from ogr polygon geometry:
-        _geom = input geometry
-        _format =:
+        
+        paramets for self.ogr_geometry2layer
+        ----------------------
+        [0]_geoms = input geometry or geometry list
+        [1]_format =:
             wkt - postgis geometry as ST_AsText() (DEFAULT)
             geojson
             gml
             wkb
-        _geom_proj = None or projection in format osr.SpatialReference
+        [2]_geom_proj = None or projection in format (osr.SpatialReference, WKT, EPSG)
         return to input array2raster class
         """
-        # crete vector in memory
-        drv = ogr.GetDriverByName("MEMORY")
-        source = drv.CreateDataSource('memData')
-        if _geom_proj is None:
-            srs_layer =  osr.SpatialReference(wkt=self.Projection)
+        self.ogr_geometry2layer(*args, **kwargs)
+        return self.cut_shp_layer()
+
+    def is_georeferenced(self):
+        if self.Projection == '' or self.TL_x == 0.0 or self.TL_y == 0.0:
+            return False
         else:
-            srs_layer = _geom_proj
-        layer = source.CreateLayer(
-            'memData',
-            geom_type=ogr.wkbPolygon,
-            srs=srs_layer
-        )
-        # create geometry
-        if _format.lower() == "wkt":
-            geom = ogr.CreateGeometryFromWkt(_geom)
-        elif _format.lower() in ("geojson", "gjson", "json"):
-            geom = ogr.CreateGeometryFromJson(_geom)
-        elif _format.lower() == "gml":
-            geom = ogr.CreateGeometryFromGML(_geom)
-        elif _format.lower() == "wkb":
-            geom = ogr.CreateGeometryFromWkb(b64decode(_geom))
-        else:
-            raise
-        # create field
-        field = ogr.FieldDefn("mem", ogr.OFTString)
-        layer.CreateField(field)
-        # create feature
-        featureDefn = layer.GetLayerDefn()
-        feature = ogr.Feature(featureDefn)
-        feature.SetGeometry(geom)
-        feature.SetField("mem", "mem")
-        layer.CreateFeature(feature)
-        feature = None
-        return self.cut_shp_layer(layer)
+            return True
 
     def is_valid(self):
         """
@@ -413,6 +370,9 @@ class raster2array (object):
 
 
 class array2raster(raster2array):
+    """
+    Class array to raster function
+    """
 
     def __init__(self, _raster, _array, _fname=False, _band=1, _drv=False, _nodata=None):
         """
@@ -452,7 +412,7 @@ class array2raster(raster2array):
                              self.raster_codage,
                              options=self._gdal_opts)
         self.Ds.SetGeoTransform(self.GeoTransform)
-        self.Ds.SetProjection(self.Projection)
+        self.Ds.SetProjection(proj_conv(None, self.Projection).get_proj())
         self.Band = self.Ds.GetRasterBand(_band)
         if _array is not None:
             self.Band.WriteArray(_array)
@@ -517,28 +477,47 @@ class array2raster(raster2array):
 
 
 class raster2transform(raster2array):
+    """
+    Class for raster tranfsormation
+    """
 
-    def __init__(self, _input, _rows, _cols, _proj=None):
+    def __init__(self, _input, _rows=None, _cols=None, _proj=None, _band=1):
         """
         _input is stdict (memory hight)
         _input is filename raster file (memory midi)
         _input is object raster2array (memory low)
+        _proj = None or projection in format: 
+                str:WKT, int:EPSG, dict:{'proj_type':'proj_data'}
         """
+        # raster init
         if type(_input) is str:
-            self.raster = raster2array(_input)
+            self.raster = raster2array(_input, _band)
         elif type(_input) is dict:
             self.raster = array2raster(None, _input)
         else:
             self.raster = _input
-        self.rows = _rows
-        self.cols = _cols
-        if _proj is None:
-            self.Projection = self.raster.Projection
+        # rows init
+        if _rows is None:
+            self.rows = self.raster.rows
         else:
-            self.Projection = _proj
-        self.transform()
+            self.rows = _rows
+        # cols init
+        if _cols is None:
+            self.cols = self.raster.cols
+        else:
+            self.cols = _cols
+        # proj init
+        if _proj is None:
+            _proj = self.raster.Projection
+        self.Projection = proj_conv(None, _proj).get_proj()
 
-    def transform(self):
+    def transform(self, *args):
+        """
+        georeference raster from more point coordinates
+        args = [(x1,y1),(x2,y2),(xn,yn)] or (x1,y1),(x2,y2),(xn,yn)
+        """
+        if len(args) == 1 and type(args[0]) is list:
+            args = args[0]
         # input params
         _cols = self.raster.cols
         _rows = self.raster.rows
@@ -549,13 +528,38 @@ class raster2transform(raster2array):
         _TL_y = float(_GeoTransform[3])
         _y_res = float(_GeoTransform[5])
         _y_diff = float(_GeoTransform[4])
+        # test projection
+        if self.Projection == '':
+            raise Exception('projection for georeference not found')
         # transform parms
-        UL_x = _TL_x
-        x_res = float((_x_res * _cols) / self.cols)
+        if args == []:
+            UL_x = _TL_x
+            UL_y = _TL_y
+            LR_x = None
+            LR_y = None
+        else:
+            x_array = [float(my[0]) for my in args]
+            y_array = [float(my[1]) for my in args]
+            UL_x = min(x_array)
+            UL_y = max(y_array)
+            LR_x = max(x_array)
+            LR_y = min(y_array)
+        # find x_res 
+        if _x_res == 1.0 and LR_x is None:
+            raise Exception('coordinates for georeference not found')
+        if LR_x is not None:
+            x_res = float((LR_x - UL_x) / self.cols)
+        else:
+            x_res = float((_x_res * _cols) / self.cols)
+        # find y_res 
+        if _y_res == 1.0 and LR_y is None:
+            raise Exception('coordinates for georeference not found')
+        if LR_y is not None:
+            y_res = float((LR_y - UL_y) / self.rows)
+        else:
+            y_res = float((_y_res * _rows) / self.rows)
         x_diff = _x_diff
-        UL_y = _TL_y
         y_diff = _y_diff
-        y_res = float((_y_res * _rows) / self.rows)
         # create transform raster
         t_raster = array2raster(
             None,
@@ -596,6 +600,48 @@ class raster2transform(raster2array):
         self.Band = self.Ds.GetRasterBand(1)
         self.np_array = None
         self.raster = None
+       
+    def transform_shp_layer(self, layer=None):
+        """
+        Transform raster from bbox shp layer
+        layer = ogr object laer
+        """
+        if layer is not None:
+            self.Layer = layer
+            self.layer_reproj()
+        x1, x2, y1, y2 = self.get_layer_extent()
+        return self.transform((x1, y1), (x2, y2))
+
+    def transform_shp_file(self, *args, **kwargs):
+        """
+        Transform raster from bbox shape file
+        
+        paramets for self.shp_file2layer
+        ----------------------
+        [0]shp_file = shapefile name
+        [1]shp_index = index layer from index
+        [2]_proj(describle) = None or projection in format: 
+                str:WKT, int:EPSG, dict:{'proj_type':'proj_data'}
+        """
+        self.shp_file2layer(*args, **kwargs)
+        return self.transform_shp_layer()
+    
+    def tranform_ogr_geometry(self, *args, **kwargs):
+        """
+        Transform raster from ogr polygon geometry:
+        
+        paramets for self.ogr_geometry2layer
+        ----------------------
+        [0]_geoms = input geometry or geometry list
+        [1]_format =:
+            wkt - postgis geometry as ST_AsText() (DEFAULT)
+            geojson
+            gml
+            wkb
+        [2]_geom_proj = None or projection in format (osr.SpatialReference, WKT, EPSG)
+        """
+        self.ogr_geometry2layer(*args, **kwargs)
+        return self.transform_shp_layer()
 
     def save(self, _fname):
         array2raster(self, None, _fname)

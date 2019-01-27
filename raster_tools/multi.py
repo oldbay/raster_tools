@@ -127,12 +127,16 @@ class raster2multiraster (object):
             self.drvname = args[-1]
         else:
             self.drvname = "GTiff"
+        # test raster codage
+        if 'raster_codage' in self.ext_rasters[0].__dict__:
+            self.raster_codage = self.ext_rasters[0].raster_codage
+        else:
+            self.raster_codage = gdal.GDT_Float64
         # image size and tiles
         self.GeoTransform = self.ext_rasters[0].GeoTransform
         self.cols = self.ext_rasters[0].cols
         self.rows = self.ext_rasters[0].rows
         self.Projection = self.ext_rasters[0].Projection
-        self.raster_codage = self.ext_rasters[0].raster_codage
         self._gdal_opts = self._gdal_test()
         drv = gdal.GetDriverByName(self.drvname)
         self.Ds = drv.Create(self.fname,
@@ -151,7 +155,6 @@ class raster2multiraster (object):
             self.cols,
             self.rows,
             self.Projection,
-            self.raster_codage,
         ]
         band_num = 1
         for _raster in self.ext_rasters:
@@ -162,7 +165,6 @@ class raster2multiraster (object):
                 _raster.cols,
                 _raster.rows,
                 _raster.Projection,
-                _raster.raster_codage,
             ]
             if _raster_params == _def_params:
                 band = self.Ds.GetRasterBand(band_num)
