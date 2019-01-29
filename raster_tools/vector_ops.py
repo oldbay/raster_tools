@@ -158,7 +158,7 @@ class geom_conv(object):
             out_feature.SetField("mem", "mem")
             layer.CreateFeature(out_feature)
             out_feature = None
-        #source and layer to self obj    
+        #source and layer to self obj 
         self.Layer_source = source
         self.Layer = layer
 
@@ -181,10 +181,11 @@ class geom_conv(object):
             # transform memory layers
             transform = osr.CoordinateTransformation(layer_srs, raster_srs)
             features = []
-            for feature in layer:
-                transformed = feature.GetGeometryRef()
-                transformed.Transform(transform)
-                features.append(transformed)
+            for layer_feature in layer:
+                wkt = layer_feature.GetGeometryRef().ExportToWkt()
+                geom = ogr.CreateGeometryFromWkt(wkt)
+                geom.Transform(transform)
+                features.append(geom)
             self.create_layer(raster_srs, *features)
 
     def shp_file2layer(self, shp_file, shp_index=0, _proj=None):
@@ -206,7 +207,11 @@ class geom_conv(object):
             else:
                 srs = proj_conv(None, _proj).get_srs()
             # shp to memory layer
-            features = [ f.GetGeometryRef() for f in layer ]
+            features = []
+            for layer_feature in layer:
+                wkt = layer_feature.GetGeometryRef().ExportToWkt()
+                geom = ogr.CreateGeometryFromWkt(wkt)
+                features.append(geom)
             self.create_layer(srs, *features)
             # reprojection imput layer
             self.layer_reproj()
@@ -220,12 +225,13 @@ class geom_conv(object):
             geojson
             gml
             wkb
-        _geom_proj = None or projection in format (osr.SpatialReference, WKT, EPSG)
+        _proj = None or projection in format: 
+                str:WKT, int:EPSG, dict:{'proj_type':'proj_data'}
         """
         # geometry
-        if not isinstance(_geom, list):
+        if not isinstance(_geoms, list):
             _ = []
-            _.append(_geom)
+            _.append(_geoms)
             _geoms = _
         # find projection
         if _proj is None and self.Projection == '':

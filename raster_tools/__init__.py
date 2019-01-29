@@ -13,6 +13,7 @@ from gdal_array import (
 )
 from multi import (
     raster2multiarray,
+    multiraster2transform, 
     raster2multiraster,
     multiarray2multiraster,
     repair2reload

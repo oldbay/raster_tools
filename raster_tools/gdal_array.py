@@ -15,9 +15,12 @@ class raster2array (geom_conv):
     stdict_div - division output standart dict (False/Int - div)
                   for self.get_std_dict() & self.cut_area()
     codage - type numpy array returned to mrthods this class
+    nodata - raster nodata
     """
     stdict_div = False
     codage = np.float64
+    nodata = -9999
+    np_array = None
 
     def __init__(self, fname, _band=1):
 
@@ -35,7 +38,9 @@ class raster2array (geom_conv):
         self.rows = self.Ds.RasterYSize
         self.bands = self.Ds.RasterCount
         self.Band = self.Ds.GetRasterBand(_band)
-        self.np_array = None
+        
+    def return_band_nodata(self):
+        self.nodata = self.Band.GetNoDataValue()
 
     def array(self, x_index=0, y_index=0, x_size=None, y_size=None):
         """
@@ -156,6 +161,7 @@ class raster2array (geom_conv):
                         self.y_res
                     ),
                     "projection": self.Projection,
+                    "nodata": self.nodata,
                 }
 
     def get_std_dict(self, x_index=0, y_index=0, x_size=None, y_size=None):
@@ -194,8 +200,8 @@ class raster2array (geom_conv):
                     self.y_res
                 ),
                 "projection": self.Projection,
+                "nodata": self.nodata,
             }
-
 
     def cut_area(self, *args):
         """
@@ -235,13 +241,14 @@ class raster2array (geom_conv):
             shp_raster = array2raster(None, cut_area)
             gdal.RasterizeLayer(shp_raster.Ds, [1], self.Layer, burn_values=[1])
             shp_cut_array = np.where(
-                shp_raster.array() == 1, cut_area["array"], 0
+                shp_raster.array() == 1, cut_area["array"], self.nodata
             )
             return {
                 "array": shp_cut_array,
                 "shape": cut_area["shape"],
                 "transform": cut_area["transform"],
                 "projection": self.Projection,
+                "nodata": self.nodata,
             }
 
     def cut_shp_file(self, *args, **kwargs):
@@ -271,7 +278,8 @@ class raster2array (geom_conv):
             geojson
             gml
             wkb
-        [2]_geom_proj = None or projection in format (osr.SpatialReference, WKT, EPSG)
+        [2]_proj = None or projection in format: 
+                str:WKT, int:EPSG, dict:{'proj_type':'proj_data'}
         return to input array2raster class
         """
         self.ogr_geometry2layer(*args, **kwargs)
@@ -347,6 +355,7 @@ class raster2array (geom_conv):
                 _y_res
             ),
             "projection": self.Projection,
+            "nodata": self.nodata,
         }
 
     def np_array_load(self):
@@ -393,12 +402,14 @@ class array2raster(raster2array):
             self.rows = _array["shape"][0]
             self.cols = _array["shape"][1]
             self.Projection = _array["projection"]
+            self.nodata = _array["nodata"]
             _array = _array["array"]
         elif type(_array) is not dict and _raster is not None:
             self.GeoTransform = _raster.GeoTransform
             self.cols = _raster.cols
             self.rows = _raster.rows
             self.Projection = _raster.Projection
+            self.nodata = _raster.nodata
             if _array is None:
                 _array = _raster.array()
         else:
@@ -414,11 +425,14 @@ class array2raster(raster2array):
         self.Ds.SetGeoTransform(self.GeoTransform)
         self.Ds.SetProjection(proj_conv(None, self.Projection).get_proj())
         self.Band = self.Ds.GetRasterBand(_band)
+        # write array
         if _array is not None:
             self.Band.WriteArray(_array)
         self.Band.FlushCache()
+        # insert nodata
         if _nodata is not None:
-            self.Band.SetNoDataValue(_nodata)
+            self.nodata = _nodata
+        self.Band.SetNoDataValue(self.nodata)
         # init rastre2array vars
         self.GeoTransform = self.Ds.GetGeoTransform()
         self.TL_x = float(self.GeoTransform[0])
@@ -430,6 +444,7 @@ class array2raster(raster2array):
         self.cols = self.Ds.RasterXSize
         self.rows = self.Ds.RasterYSize
         self.bands = self.Ds.RasterCount
+        self.nodata = self.Band.GetNoDataValue()
         self.np_array = None
 
     def _gdal_test(self):
@@ -483,12 +498,20 @@ class raster2transform(raster2array):
 
     def __init__(self, _input, _rows=None, _cols=None, _proj=None, _band=1):
         """
-        _input is stdict (memory hight)
-        _input is filename raster file (memory midi)
-        _input is object raster2array (memory low)
-        _proj = None or projection in format: 
+        _input - format for input:
+            - is stdict (memory hight)
+            - is filename raster file (memory midi)
+            - is object raster2array (memory low)
+        _rows - rows for transformation raster array
+        _cols - cols for transformation raster array
+        _proj - None or projection in format: 
                 str:WKT, int:EPSG, dict:{'proj_type':'proj_data'}
         """
+        # Default raster2array values init
+        self.stdict_div = raster2array.stdict_div
+        self.codage = raster2array.codage
+        self.nodata = raster2array.nodata
+        self.np_array = raster2array.np_array
         # raster init
         if type(_input) is str:
             self.raster = raster2array(_input, _band)
@@ -510,6 +533,11 @@ class raster2transform(raster2array):
         if _proj is None:
             _proj = self.raster.Projection
         self.Projection = proj_conv(None, _proj).get_proj()
+        # Default raster2array values init
+        self.nodata = raster2array.nodata
+
+    def return_band_nodata(self):
+        self.nodata = self.raster.Band.GetNoDataValue()
 
     def transform(self, *args):
         """
@@ -532,7 +560,7 @@ class raster2transform(raster2array):
         if self.Projection == '':
             raise Exception('projection for georeference not found')
         # transform parms
-        if args == []:
+        if args == ():
             UL_x = _TL_x
             UL_y = _TL_y
             LR_x = None
@@ -576,6 +604,7 @@ class raster2transform(raster2array):
                     y_res
                 ),
                 "projection": self.Projection,
+                "nodata": self.nodata,
             }
         )
         # transformation
@@ -598,7 +627,6 @@ class raster2transform(raster2array):
         self.rows = self.Ds.RasterYSize
         self.bands = self.Ds.RasterCount
         self.Band = self.Ds.GetRasterBand(1)
-        self.np_array = None
         self.raster = None
        
     def transform_shp_layer(self, layer=None):
@@ -638,7 +666,8 @@ class raster2transform(raster2array):
             geojson
             gml
             wkb
-        [2]_geom_proj = None or projection in format (osr.SpatialReference, WKT, EPSG)
+        [2]_proj = None or projection in format: 
+                str:WKT, int:EPSG, dict:{'proj_type':'proj_data'}
         """
         self.ogr_geometry2layer(*args, **kwargs)
         return self.transform_shp_layer()
@@ -731,6 +760,7 @@ class raster2calc(object):
                                 _shape = new_kwags[key]["shape"]
                                 _transform = new_kwags[key]["transform"]
                                 _projection = new_kwags[key]["projection"]
+                                _nodata = new_kwags[key]["nodata"]
                                 calc_array = np.zeros(_shape)
                                 start_status = False
                             new_kwags[key] = new_kwags[key]["array"]
@@ -745,6 +775,7 @@ class raster2calc(object):
                 "shape": _shape,
                 "transform": _transform,
                 "projection": _projection,
+                "nodata": _nodata,
             }
         return wrapper
 

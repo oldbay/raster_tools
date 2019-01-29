@@ -4,39 +4,52 @@
 from osgeo import gdal
 import numpy as np
 from config import GDAL_OPTS
-from gdal_array import array2raster, raster2array
+from gdal_array import array2raster, raster2array, raster2transform
+from vector_ops import proj_conv
 
 
 class raster2multiarray (object):
     """
+    Class for create multiarray
+    
     multi - type:
      - None (default type)
      - cv (opencv type)
     codage - numpy array
      - np.float64 (default)
      - np.uint8 (for more operations opencv)
+    bands_img - list objects raster2array
+      - None - default
+      - dict objects - create from self.create_bands_img
     """
     multi_type = None
     codage = np.float64
+    bands_img = None
 
     def __init__(self, _fname, *args):
         """
-        _fansme - filename raster file
+        _fname - filename raster file
         if args[0] is list = bands list
         else args = bands list
         """
         self.fname = _fname
         if args == ():
             rcount = raster2array(self.fname, 1).Ds.RasterCount
-            self.bands = range(1, rcount+1)
+            self.bands_num = range(1, rcount+1)
         elif type(args[0]) is list:
-            self.bands = args[0]
+            self.bands_num = args[0]
         else:
-            self.bands = args
+            self.bands_num = args
+            
+    def create_bands_img(self):
+        self.bands_img = []
+        for band in self.bands_num:
+            img = raster2array(self.fname, band)
+            img.codage = self.codage
+            self.bands_img.append(img)
 
     def array_reshape(_method):
-        # 1
-        # decorator for reshape array to multi_type
+        # step 1 - decorator for reshape array to multi_type
         def wrapper(self, *args, **kwargs):
             out = _method(self, *args, **kwargs)
             if type(out) is dict:
@@ -56,13 +69,15 @@ class raster2multiarray (object):
         return wrapper
 
     def multibands(_method):
-        # 2
-        # decorator for create multibands array
+        # step 2 - decorator for create multibands array
         def wrapper(self, *args, **kwargs):
             _bands = []
-            for band in self.bands:
-                img = raster2array(self.fname, band)
-                img.codage = self.codage
+            for band in self.bands_num:
+                if self.bands_img is None:
+                    img = raster2array(self.fname, band)
+                    img.codage = self.codage
+                else:
+                    img = self.bands_img[band-1]
                 _bands.append(
                     img.__class__.__dict__[_method.__name__](img, *args, **kwargs)
                 )
@@ -72,6 +87,7 @@ class raster2multiarray (object):
                     "shape": _bands[0]["shape"],
                     "transform": _bands[0]["transform"],
                     "projection": _bands[0]["projection"],
+                    "nodata": _bands[0]["nodata"],
                 }
             else:
                 return np.array([band for band in _bands])
@@ -109,6 +125,120 @@ class raster2multiarray (object):
 
     def __call__(self, *args, **kwargs):
         return self.array(*args, **kwargs)
+
+
+class multiraster2transform (raster2multiarray):
+    """
+    Class for multiraster tranfsormation
+
+    multi - type:
+     - None (default type)
+     - cv (opencv type)
+    codage - numpy array
+     - np.float64 (default)
+     - np.uint8 (for more operations opencv)
+    """
+    multi_type = None
+    codage = np.float64
+    
+    def __init__(self, _fname, _rows=None, _cols=None, _proj=None, *args):
+        """
+        _fname - filename raster file
+        _rows - rows for transformation raster array
+        _cols - cols for transformation raster array
+        _proj - None or projection in format: 
+                str:WKT, int:EPSG, dict:{'proj_type':'proj_data'}
+        if args[0] is list = bands list
+        else args = bands list
+        """
+        # raster and bands numer init
+        self.fname = _fname
+        raster = raster2array(self.fname, 1)
+        if args == ():
+            rcount = raster.Ds.RasterCount
+            self.bands_num = range(1, rcount+1)
+        elif type(args[0]) is list:
+            self.bands_num = args[0]
+        else:
+            self.bands_num = args
+        # rows init
+        if _rows is None:
+            self.rows = raster.rows
+        else:
+            self.rows = _rows
+        # cols init
+        if _cols is None:
+            self.cols = raster.cols
+        else:
+            self.cols = _cols
+        # proj init
+        if _proj is None:
+            _proj = raster.Projection
+        self.Projection = proj_conv(None, _proj).get_proj()
+        # create list bands image
+        self.create_bands_img()
+    
+    def create_bands_img(self):
+        self.bands_img = []
+        for band in self.bands_num:
+            img = raster2transform(
+                self.fname,
+                self.rows, 
+                self.cols, 
+                self.Projection, 
+                band
+            )
+            img.codage = self.codage
+            self.bands_img.append(img)
+   
+    def multitransform(_method):
+        # decorator for transformation multibands array
+        def wrapper(self, *args, **kwargs):
+            _bands = []
+            for band in self.bands_num:
+                img = self.bands_img[band-1]
+                _bands.append(
+                    img.__class__.__dict__[_method.__name__](img, *args, **kwargs)
+                )
+        return wrapper
+
+    @multitransform
+    def transform(self, *args, **kwargs):
+        pass
+   
+    @multitransform
+    def transform_shp_layer(self, *args, **kwargs):
+        pass
+
+    @multitransform
+    def transform_shp_file(self, *args, **kwargs):
+        pass
+
+    @multitransform
+    def transform_ogr_gemometry(self, *args, **kwargs):
+        pass
+    
+    def save(self, _fname):
+        raster2multiraster(_fname, *self.bands_img)
+
+    # overloading raster2multiarray methods
+    def array(self, *args, **kwargs):
+        return raster2multiarray.array(self, *args, **kwargs)
+
+    def get_std_dict(self, *args, **kwargs):
+        return raster2multiarray.get_std_dict(self, *args, **kwargs)
+
+    def cut_area(self, *args, **kwargs):
+        return raster2multiarray.cut_area(self, *args, **kwargs)
+
+    def cut_shp_layer(self, *args, **kwargs):
+        return raster2multiarray.cut_shp_layer(self, *args, **kwargs)
+
+    def cut_shp_file(self, *args, **kwargs):
+        return raster2multiarray.cut_shp_file(self, *args, **kwargs)
+
+    def cut_ogr_geometry(self, *args, **kwargs):
+        return raster2multiarray.cut_ogr_geometry(self, *args, **kwargs)
     
     
 class raster2multiraster (object):
@@ -169,6 +299,7 @@ class raster2multiraster (object):
             if _raster_params == _def_params:
                 band = self.Ds.GetRasterBand(band_num)
                 band.WriteArray(_raster.array())
+                band.SetNoDataValue(_raster.nodata)
                 band = None
             band_num += 1
 
@@ -215,6 +346,7 @@ class multiarray2multiraster(object):
                         "shape": self.mdict["shape"],
                         "transform": self.mdict["transform"],
                         "projection": self.mdict["projection"],
+                        "nodata": self.mdict["nodata"],
                     }
                 )
                 for _band
