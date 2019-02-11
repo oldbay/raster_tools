@@ -3,7 +3,11 @@
 
 from osgeo import gdal
 import numpy as np
-from config import GDAL_OPTS
+from config import (
+    GDAL_OPTS, 
+    gdal2numpy_type, 
+    numpy2gdal_type, 
+)
 from gdal_array import array2raster, raster2array, raster2transform
 from vector_ops import proj_conv
 
@@ -18,13 +22,18 @@ class raster2multiarray (object):
     codage - numpy array
      - np.float64 (default)
      - np.uint8 (for more operations opencv)
+    codage - type numpy array returned to mrthods this class
+    sacle - scale to convert array (False,True,(min,max))
     bands_img - list objects raster2array
       - None - default
       - dict objects - create from self.create_bands_img
     """
     multi_type = None
     codage = np.float64
+    scale = False
+    nodata = -9999
     bands_img = None
+    _attrs_control = ['codage','scale', 'nodata']
 
     def __init__(self, _fname, *args):
         """
@@ -41,12 +50,35 @@ class raster2multiarray (object):
         else:
             self.bands_num = args
             
+        # init bands list
+        bands_img = None
+        
+    def __setattr__(self, name, value):
+        """
+        Set control attributes to bands
+        """
+        if isinstance(self.bands_img, list):
+            if name in self._attrs_control:
+                for band in self.bands_img:
+                    band.__class__.__setattr__(band, name, value)
+        super(raster2multiarray, self).__setattr__(name, value)
+            
     def create_bands_img(self):
         self.bands_img = []
         for band in self.bands_num:
             img = raster2array(self.fname, band)
             img.codage = self.codage
+            img.scale = self.scale
+            img.nodata = self.nodata
             self.bands_img.append(img)
+
+    def return_band_nodata(self):
+        raster = raster2array(self.fname)
+        self.nodata = raster.Band.GetNoDataValue()
+
+    def return_band_codage(self):
+        raster = raster2array(self.fname)
+        self.codage = gdal2numpy_type[raster.Band.DataType]
 
     def array_reshape(_method):
         # step 1 - decorator for reshape array to multi_type
@@ -73,11 +105,13 @@ class raster2multiarray (object):
         def wrapper(self, *args, **kwargs):
             _bands = []
             for band in self.bands_num:
-                if self.bands_img is None:
+                if isinstance(self.bands_img, list):
+                    img = self.bands_img[band-1]
+                else:
                     img = raster2array(self.fname, band)
                     img.codage = self.codage
-                else:
-                    img = self.bands_img[band-1]
+                    img.scale = self.scale
+                    img.nodata = self.nodata
                 _bands.append(
                     img.__class__.__dict__[_method.__name__](img, *args, **kwargs)
                 )
@@ -130,16 +164,7 @@ class raster2multiarray (object):
 class multiraster2transform (raster2multiarray):
     """
     Class for multiraster tranfsormation
-
-    multi - type:
-     - None (default type)
-     - cv (opencv type)
-    codage - numpy array
-     - np.float64 (default)
-     - np.uint8 (for more operations opencv)
     """
-    multi_type = None
-    codage = np.float64
     
     def __init__(self, _fname, _rows=None, _cols=None, _proj=None, *args):
         """
@@ -189,8 +214,10 @@ class multiraster2transform (raster2multiarray):
                 band
             )
             img.codage = self.codage
+            img.scale = self.scale
+            img.nodata = self.nodata
             self.bands_img.append(img)
-   
+            
     def multitransform(_method):
         # decorator for transformation multibands array
         def wrapper(self, *args, **kwargs):
@@ -257,27 +284,25 @@ class raster2multiraster (object):
             self.drvname = args[-1]
         else:
             self.drvname = "GTiff"
-        # test raster codage
-        if 'raster_codage' in self.ext_rasters[0].__dict__:
-            self.raster_codage = self.ext_rasters[0].raster_codage
-        else:
-            self.raster_codage = gdal.GDT_Float64
         # image size and tiles
         self.GeoTransform = self.ext_rasters[0].GeoTransform
         self.cols = self.ext_rasters[0].cols
         self.rows = self.ext_rasters[0].rows
         self.Projection = self.ext_rasters[0].Projection
+        raster_codage = numpy2gdal_type(self.ext_rasters[0].codage)
         self._gdal_opts = self._gdal_test()
         drv = gdal.GetDriverByName(self.drvname)
         self.Ds = drv.Create(self.fname,
                              self.cols,
                              self.rows,
                              len(self.ext_rasters),
-                             self.raster_codage,
+                             raster_codage,
                              options=self._gdal_opts)
         self.Ds.SetGeoTransform(self.GeoTransform)
         self.Ds.SetProjection(self.Projection)
         self.add_bands()
+        # pyramid overviews
+        #self.Ds.BuildOverviews("NEAREST", [2, 4, 8, 16, 32, 64])
 
     def add_bands(self):
         _def_params = [

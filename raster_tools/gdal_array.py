@@ -3,7 +3,16 @@
 
 from osgeo import gdal
 import numpy as np
-from config import GDAL_OPTS, raster_params, echo_output
+from config import (
+    GDAL_OPTS, 
+    raster_params, 
+    echo_output,
+    numpy_codage_type, 
+    gdal2numpy_type, 
+    numpy2gdal_type, 
+    def_scale, 
+    numpy_type2nodata
+)
 from vector_ops import proj_conv, geom_conv
 from base64 import b64decode
 
@@ -15,15 +24,16 @@ class raster2array (geom_conv):
     stdict_div - division output standart dict (False/Int - div)
                   for self.get_std_dict() & self.cut_area()
     codage - type numpy array returned to mrthods this class
+    sacle - scale to convert array (False,True,(min,max))
     nodata - raster nodata
     """
     stdict_div = False
     codage = np.float64
+    scale = False
     nodata = -9999
     np_array = None
 
     def __init__(self, fname, _band=1):
-
         self.Ds = gdal.Open(fname)
         # image size and tiles
         self.GeoTransform = self.Ds.GetGeoTransform()
@@ -38,9 +48,28 @@ class raster2array (geom_conv):
         self.rows = self.Ds.RasterYSize
         self.bands = self.Ds.RasterCount
         self.Band = self.Ds.GetRasterBand(_band)
+        self.return_band_codage()
         
+    def __setattr__(self, name, value):
+        """
+        Translate codage value to np.dtype type
+        Correct nodata value from codage
+        """
+        if name == 'codage':
+            _codage = numpy_codage_type(value)
+            super(raster2array, self).__setattr__('codage', _codage)
+            self.nodata = self.nodata
+        elif name == 'nodata':
+            _nodata = numpy_type2nodata(self.codage, value)
+            super(raster2array, self).__setattr__('nodata', _nodata)
+        else:
+            super(raster2array, self).__setattr__(name, value)
+
     def return_band_nodata(self):
         self.nodata = self.Band.GetNoDataValue()
+
+    def return_band_codage(self):
+        self.codage = gdal2numpy_type[self.Band.DataType]
 
     def array(self, x_index=0, y_index=0, x_size=None, y_size=None):
         """
@@ -51,12 +80,36 @@ class raster2array (geom_conv):
         y_size - points for y axis
         """
         if self.np_array is None:
-            return self.Band.ReadAsArray(
+            # read raster
+            _rsater = self.Band.ReadAsArray(
                 x_index,
                 y_index,
                 x_size,
                 y_size
-            ).astype(self.codage)
+            )
+            # find band nodata
+            band_nodata = self.Band.GetNoDataValue()
+            if band_nodata is None:
+                band_nodata = np.nan
+            # scale & band nodata
+            if self.scale:
+                if not (isinstance(self.scale, list) or isinstance(self.scale, tuple)):
+                    self.scale = def_scale
+                s_min = self.scale[0]
+                s_max = self.scale[-1]
+                s_meso = s_max - s_min
+                r_max = np.max(np.where(_rsater==band_nodata, np.min(_rsater), _rsater))
+                r_min = np.min(np.where(_rsater==band_nodata, np.max(_rsater), _rsater))
+                r_meso = r_max - r_min
+                _rsater = (((_rsater-r_min)*s_meso)/r_meso)+s_min
+            else:
+                _rsater = np.where(
+                    _rsater==band_nodata, 
+                    self.nodata, 
+                    _rsater
+                )
+            # result
+            return _rsater.astype(self.codage)
         else:
             if x_size is None:
                 _cols = self.cols
@@ -397,42 +450,52 @@ class array2raster(raster2array):
         self.drvname = _drv
         self._gdal_opts = self._gdal_test()
         # image size and tiles
-        if type(_array) is dict:
+        if isinstance(_array, dict):
             self.GeoTransform = _array["transform"]
             self.rows = _array["shape"][0]
             self.cols = _array["shape"][1]
             self.Projection = _array["projection"]
             self.nodata = _array["nodata"]
             _array = _array["array"]
-        elif type(_array) is not dict and _raster is not None:
+        elif isinstance(_raster, raster2array):
             self.GeoTransform = _raster.GeoTransform
             self.cols = _raster.cols
             self.rows = _raster.rows
             self.Projection = _raster.Projection
+            self.codage = _raster.codage
             self.nodata = _raster.nodata
-            if _array is None:
+            if not isinstance(_array, np.ndarray):
                 _array = _raster.array()
         else:
-            raise
-        self.raster_codage = gdal.GDT_Float64
+            raise Exception('Array data type is wrong!')
+        # correct codage and nodata to array numpy type
+        if isinstance(_array, np.ndarray):
+            self.codage = _array.dtype.type
+        else:
+            self.codage = np.float64
+        self.nodata = numpy_type2nodata(self.codage, self.nodata)
+        #create raster
+        raster_codage = numpy2gdal_type(self.codage)
         drv = gdal.GetDriverByName(self.drvname)
         self.Ds = drv.Create(self.fname,
                              self.cols,
                              self.rows,
                              1,
-                             self.raster_codage,
+                             raster_codage,
                              options=self._gdal_opts)
         self.Ds.SetGeoTransform(self.GeoTransform)
         self.Ds.SetProjection(proj_conv(None, self.Projection).get_proj())
         self.Band = self.Ds.GetRasterBand(_band)
         # write array
-        if _array is not None:
+        if isinstance(_array, np.ndarray):
             self.Band.WriteArray(_array)
         self.Band.FlushCache()
         # insert nodata
         if _nodata is not None:
             self.nodata = _nodata
         self.Band.SetNoDataValue(self.nodata)
+        # pyramid overviews
+        #self.Ds.BuildOverviews("NEAREST", [2, 4, 8, 16, 32, 64])
         # init rastre2array vars
         self.GeoTransform = self.Ds.GetGeoTransform()
         self.TL_x = float(self.GeoTransform[0])
@@ -510,6 +573,7 @@ class raster2transform(raster2array):
         # Default raster2array values init
         self.stdict_div = raster2array.stdict_div
         self.codage = raster2array.codage
+        self.scale = raster2array.scale
         self.nodata = raster2array.nodata
         self.np_array = raster2array.np_array
         # raster init
@@ -533,11 +597,14 @@ class raster2transform(raster2array):
         if _proj is None:
             _proj = self.raster.Projection
         self.Projection = proj_conv(None, _proj).get_proj()
-        # Default raster2array values init
-        self.nodata = raster2array.nodata
+        # codage init
+        self.return_band_codage()
 
     def return_band_nodata(self):
         self.nodata = self.raster.Band.GetNoDataValue()
+
+    def return_band_codage(self):
+        self.codage = gdal2numpy_type[self.raster.Band.DataType]
 
     def transform(self, *args):
         """
@@ -593,7 +660,6 @@ class raster2transform(raster2array):
             None,
             {
                 "array": None,
-                #"array": np.zeros((self.rows, self.cols)),
                 "shape": (self.rows, self.cols),
                 "transform": (
                     UL_x,
