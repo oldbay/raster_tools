@@ -3,6 +3,8 @@
 
 from osgeo import ogr, osr
 from random import randint
+from base64 import b64decode
+import ast
 
 
 ########################################################################
@@ -91,7 +93,7 @@ class proj_conv(object):
         """
         formats:
             output: "MICoordSys", "PCI", "Proj4",
-            "PrettyWkt", "USGS", "Wkt", "XML"
+            "PrettyWkt", "USGS", "Wkt", "XML", "EPSG"
         """
         if _proj_type.lower() == "micoordsys":
             return self.srs.ExportToMICoordSys()
@@ -107,6 +109,15 @@ class proj_conv(object):
             return self.srs.ExportToWkt()
         elif _proj_type.lower() == "xml":
             return self.srs.ExportToXML()
+        elif _proj_type.lower() == "epsg":
+            try:
+                epsg = int(self.srs.GetAttrValue("AUTHORITY", 1))
+            except:
+                return None
+            else:
+                return epsg
+        else:
+            raise Exception('Projection type \'{}\' is not found'.format(_proj_type))
         
     def get_srs(self):
         return self.srs
@@ -131,6 +142,43 @@ class geom_conv(object):
         else:
             self.Projection = ''
         
+    def coords_reproj(self, _proj, *args):
+        """
+        Reprojection coordinates
+        _proj(describle) = None or projection in format: 
+                str:WKT, int:EPSG, dict:{'proj_type':'proj_data'}
+        *args = coordinates list (x,y), (x,y) or [(x,y), (x,y)]
+        """
+        # test null layer or projection
+        if self.Projection == '':
+            return None
+        # test insert args
+        if len(args) == 0:
+            return None
+        elif len(args) == 1 and isinstance[args[0], list]:
+            in_coords = args[0]
+        else:
+            in_coords = args
+        # test projection layer
+        in_srs = proj_conv(None, self.Projection).get_srs()
+        out_srs = proj_conv(None, _proj).get_srs()
+        # transform memory layers
+        transform = osr.CoordinateTransformation(in_srs, out_srs)
+        out_coords = []
+        for coord in in_coords:
+            if len(coord) == 2:
+                geom = ogr.CreateGeometryFromWkt(
+                    'POINT({0} {1})'.format(
+                        coord[0], 
+                        coord[1]
+                    )
+                )
+                geom.Transform(transform)
+                out_coords.append(
+                    ast.literal_eval(geom.ExportToJson())['coordinates']
+                )
+        return out_coords
+
     def create_layer(self, srs, *args):
         # create name in memory
         mem_name = str(

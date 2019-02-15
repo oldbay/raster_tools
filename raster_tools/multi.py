@@ -29,9 +29,9 @@ class raster2multiarray (object):
       - dict objects - create from self.create_bands_img
     """
     multi_type = None
-    codage = np.float64
-    scale = False
-    nodata = -9999
+    codage = np.uint8
+    scale = True
+    nodata = 0
     bands_img = None
     _attrs_control = ['codage','scale', 'nodata']
 

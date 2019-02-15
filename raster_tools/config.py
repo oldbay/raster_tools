@@ -36,7 +36,6 @@ def_scale = [2, 253]
 gdal2numpy_type = {
     gdal.GDT_Unknown: np.float32,
     gdal.GDT_Byte: np.uint8,
-    gdal.GDT_Byte: np.int8,
     gdal.GDT_UInt16: np.uint16,
     gdal.GDT_Int16: np.int16,
     gdal.GDT_UInt32: np.uint32,
@@ -88,7 +87,9 @@ def numpy2gdal_type(numpy_type):
 
 def numpy_type2nodata(numpy_type, nodata):
     numpy_type = numpy_codage_type(numpy_type)
-    if numpy_type:
+    if nodata is None:
+        return None
+    elif numpy_type:
         if 'int' in numpy_type.__name__:
             np_type_info = np.iinfo
         else:

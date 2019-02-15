@@ -14,7 +14,10 @@ from config import (
     numpy_type2nodata
 )
 from vector_ops import proj_conv, geom_conv
-from base64 import b64decode
+try:
+    from pyproj import Geod
+except:
+    Geod = None
 
 
 class raster2array (geom_conv):
@@ -49,6 +52,7 @@ class raster2array (geom_conv):
         self.bands = self.Ds.RasterCount
         self.Band = self.Ds.GetRasterBand(_band)
         self.return_band_codage()
+        #self.return_band_nodata()
         
     def __setattr__(self, name, value):
         """
@@ -343,6 +347,63 @@ class raster2array (geom_conv):
             return False
         else:
             return True
+        
+    def get_raster_extent(self, proj, out=None):
+        """
+        return raster extent
+        proj(describle) = None or projection in format: 
+                str:WKT, int:EPSG, dict:{'proj_type':'proj_data'}
+        out None: list [[ul],[ur],[lr],[ll],[ul]] (list)
+            wkt - wkt geometry polygon (str)
+            json(geojson) - geojson geometry polygon (dict)
+        """
+        ul = self.get_index_coord(0, 0)
+        ur = self.get_index_coord(0, self.rows)
+        lr = self.get_index_coord(self.cols, self.rows)
+        ll = self.get_index_coord(self.cols, 0)
+        out_ret = self.coords_reproj(proj, ul, ur, lr, ll, ul)
+        if isinstance(out, str) or isinstance(out, unicode):
+            if out.lower() in ("geojson", "gjson", "json"):
+                out_ret = {
+                    "type": "Polygon",
+                    "coordinates": [out_ret],
+                }
+                epsg = proj_conv(None, proj).get_proj('epsg')
+                if epsg is not None:
+                    out_ret["crs"] = {
+                        "type": "name",
+                        "properties": {"name": "EPSG:{}".format(epsg)}
+                    }
+            elif out.lower() == "wkt":
+                out_ret = 'POLYGON (({0} {1},{2} {3},{4} {5},{6} {7},{8} {9}))'.format(
+                        '{0:.13f}'.format(out_ret[0][0]),
+                        '{0:.13f}'.format(out_ret[0][1]), 
+                        '{0:.13f}'.format(out_ret[1][0]), 
+                        '{0:.13f}'.format(out_ret[1][1]), 
+                        '{0:.13f}'.format(out_ret[2][0]), 
+                        '{0:.13f}'.format(out_ret[2][1]), 
+                        '{0:.13f}'.format(out_ret[3][0]), 
+                        '{0:.13f}'.format(out_ret[3][1]), 
+                        '{0:.13f}'.format(out_ret[4][0]), 
+                        '{0:.13f}'.format(out_ret[4][1]),
+                )
+        return out_ret
+    
+    def get_wgs84_area(self, pixel=False):
+        if Geod is not None:
+            g = Geod(ellps='WGS84')
+            extent = self.get_raster_extent(4326)
+            ul = extent[0]
+            ur = extent[1]
+            lr = extent[2]
+            _, _, width = g.inv(ul[0], ul[1], ur[0], ur[1])
+            _, _, height = g.inv(ur[0], ur[1], lr[0], lr[1])
+            area = width * height
+            if pixel:
+                return area / (self.cols * self.rows)
+            else:
+                return area
+            
 
     def is_valid(self):
         """
@@ -493,7 +554,8 @@ class array2raster(raster2array):
         # insert nodata
         if _nodata is not None:
             self.nodata = _nodata
-        self.Band.SetNoDataValue(self.nodata)
+        if self.nodata is not None:
+            self.Band.SetNoDataValue(self.nodata)
         # pyramid overviews
         #self.Ds.BuildOverviews("NEAREST", [2, 4, 8, 16, 32, 64])
         # init rastre2array vars
@@ -577,12 +639,14 @@ class raster2transform(raster2array):
         self.nodata = raster2array.nodata
         self.np_array = raster2array.np_array
         # raster init
-        if type(_input) is str:
+        if isinstance(_input, str) or isinstance(_input, unicode):
             self.raster = raster2array(_input, _band)
-        elif type(_input) is dict:
+        elif isinstance(_input, dict):
             self.raster = array2raster(None, _input)
-        else:
+        elif isinstance(_input, raster2array) or isinstance(_input, array2raster):
             self.raster = _input
+        else:
+            raise Exception('error input format')
         # rows init
         if _rows is None:
             self.rows = self.raster.rows
@@ -617,6 +681,7 @@ class raster2transform(raster2array):
         _cols = self.raster.cols
         _rows = self.raster.rows
         _GeoTransform = self.raster.GeoTransform
+        _Projection = self.raster.Projection
         _TL_x = float(_GeoTransform[0])
         _x_res = float(_GeoTransform[1])
         _x_diff = float(_GeoTransform[2])
@@ -627,11 +692,17 @@ class raster2transform(raster2array):
         if self.Projection == '':
             raise Exception('projection for georeference not found')
         # transform parms
-        if args == ():
+        if args == () and self.Projection == _Projection:
             UL_x = _TL_x
             UL_y = _TL_y
             LR_x = None
             LR_y = None
+        elif args == () and self.Projection != _Projection:
+            extent = self.raster.get_raster_extent(self.Projection)
+            UL_x = extent[0][0]
+            UL_y = extent[0][1]
+            LR_x = extent[2][0]
+            LR_y = extent[2][1]
         else:
             x_array = [float(my[0]) for my in args]
             y_array = [float(my[1]) for my in args]
