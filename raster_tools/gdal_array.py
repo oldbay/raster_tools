@@ -51,8 +51,11 @@ class raster2array (geom_conv):
         self.rows = self.Ds.RasterYSize
         self.bands = self.Ds.RasterCount
         self.Band = self.Ds.GetRasterBand(_band)
+        # codage init
         self.return_band_codage()
-        #self.return_band_nodata()
+        # nodata init
+        if self.Band.GetNoDataValue() is not None:
+            self.return_band_nodata()
         
     def __setattr__(self, name, value):
         """
@@ -348,7 +351,7 @@ class raster2array (geom_conv):
         else:
             return True
         
-    def get_raster_extent(self, proj, out=None):
+    def get_raster_extent(self, proj=None, out=None):
         """
         return raster extent
         proj(describle) = None or projection in format: 
@@ -357,6 +360,8 @@ class raster2array (geom_conv):
             wkt - wkt geometry polygon (str)
             json(geojson) - geojson geometry polygon (dict)
         """
+        if proj is None:
+            proj = self.Projection
         ul = self.get_index_coord(0, 0)
         ur = self.get_index_coord(0, self.rows)
         lr = self.get_index_coord(self.cols, self.rows)
@@ -499,7 +504,7 @@ class array2raster(raster2array):
 
     def __init__(self, _raster, _array, _fname=False, _band=1, _drv=False, _nodata=None):
         """
-        _raster = oject to raster2array OR None
+        _raster = oject to raster2array OR gdal.dataset OR None
         _array = np.array OR standart dict
         _fname = filename OR False for use memory OR None
         _band = number of band
@@ -527,6 +532,16 @@ class array2raster(raster2array):
             self.nodata = _raster.nodata
             if not isinstance(_array, np.ndarray):
                 _array = _raster.array()
+        elif isinstance(_raster, gdal.Dataset):
+            self.GeoTransform = _raster.GetGeoTransform()
+            self.cols = _raster.RasterXSize
+            self.rows = _raster.RasterYSize
+            self.Projection = _raster.GetProjection()
+            _raster_band = _raster.GetRasterBand(_band)
+            self.codage = gdal2numpy_type[_raster_band.DataType]
+            self.nodata = _raster_band.GetNoDataValue()
+            if not isinstance(_array, np.ndarray):
+                _array = _raster_band.ReadAsArray()
         else:
             raise Exception('Array data type is wrong!')
         # correct codage and nodata to array numpy type
@@ -663,6 +678,9 @@ class raster2transform(raster2array):
         self.Projection = proj_conv(None, _proj).get_proj()
         # codage init
         self.return_band_codage()
+        # nodata init
+        if self.raster.Band.GetNoDataValue() is not None:
+            self.return_band_nodata()
 
     def return_band_nodata(self):
         self.nodata = self.raster.Band.GetNoDataValue()
@@ -677,32 +695,39 @@ class raster2transform(raster2array):
         """
         if len(args) == 1 and type(args[0]) is list:
             args = args[0]
+        # test projection
+        if self.Projection == '':
+            raise Exception('projection for georeference not found')
+        # warp raster to new projection 
+        if args == () and self.Projection != self.raster.Projection:
+            resampling = gdal.GRA_NearestNeighbour
+            error_threshold = 0.125
+            self.raster = array2raster(
+                gdal.AutoCreateWarpedVRT(
+                    self.raster.Ds, 
+                    None, 
+                    self.Projection, 
+                    resampling, 
+                    error_threshold,
+                ),
+                None
+            )
         # input params
         _cols = self.raster.cols
         _rows = self.raster.rows
         _GeoTransform = self.raster.GeoTransform
-        _Projection = self.raster.Projection
         _TL_x = float(_GeoTransform[0])
         _x_res = float(_GeoTransform[1])
         _x_diff = float(_GeoTransform[2])
         _TL_y = float(_GeoTransform[3])
         _y_res = float(_GeoTransform[5])
         _y_diff = float(_GeoTransform[4])
-        # test projection
-        if self.Projection == '':
-            raise Exception('projection for georeference not found')
         # transform parms
-        if args == () and self.Projection == _Projection:
+        if args == ():
             UL_x = _TL_x
             UL_y = _TL_y
             LR_x = None
             LR_y = None
-        elif args == () and self.Projection != _Projection:
-            extent = self.raster.get_raster_extent(self.Projection)
-            UL_x = extent[0][0]
-            UL_y = extent[0][1]
-            LR_x = extent[2][0]
-            LR_y = extent[2][1]
         else:
             x_array = [float(my[0]) for my in args]
             y_array = [float(my[1]) for my in args]
@@ -764,7 +789,7 @@ class raster2transform(raster2array):
         self.rows = self.Ds.RasterYSize
         self.bands = self.Ds.RasterCount
         self.Band = self.Ds.GetRasterBand(1)
-        self.raster = None
+        #self.raster = None
        
     def transform_shp_layer(self, layer=None):
         """

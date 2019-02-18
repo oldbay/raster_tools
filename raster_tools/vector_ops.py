@@ -167,12 +167,11 @@ class geom_conv(object):
         out_coords = []
         for coord in in_coords:
             if len(coord) == 2:
-                geom = ogr.CreateGeometryFromWkt(
-                    'POINT({0} {1})'.format(
-                        coord[0], 
-                        coord[1]
-                    )
-                )
+                _json = {
+                    "type": "Point",
+                    "coordinates": [coord[0], coord[1]],
+                }
+                geom = ogr.CreateGeometryFromJson(str(_json))
                 geom.Transform(transform)
                 out_coords.append(
                     ast.literal_eval(geom.ExportToJson())['coordinates']
