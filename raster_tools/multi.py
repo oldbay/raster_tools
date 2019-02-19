@@ -42,14 +42,18 @@ class raster2multiarray (object):
         else args = bands list
         """
         self.fname = _fname
+        raster = raster2array(self.fname)
         if args == ():
-            rcount = raster2array(self.fname, 1).Ds.RasterCount
-            self.bands_num = range(1, rcount+1)
+            self.bands_num = range(1, raster.bands+1)
         elif type(args[0]) is list:
             self.bands_num = args[0]
         else:
             self.bands_num = args
-            
+        # codage init
+        self.return_band_codage()
+        # nodata init
+        if raster.nodata is not None:
+            self.return_band_nodata()
         # init bands list
         bands_img = None
         
@@ -74,11 +78,11 @@ class raster2multiarray (object):
 
     def return_band_nodata(self):
         raster = raster2array(self.fname)
-        self.nodata = raster.Band.GetNoDataValue()
+        self.nodata = raster.nodata
 
     def return_band_codage(self):
         raster = raster2array(self.fname)
-        self.codage = gdal2numpy_type[raster.Band.DataType]
+        self.codage = raster.codage
 
     def array_reshape(_method):
         # step 1 - decorator for reshape array to multi_type
@@ -165,6 +169,8 @@ class multiraster2transform (raster2multiarray):
     """
     Class for multiraster tranfsormation
     """
+    warp_resampling = gdal.GRA_NearestNeighbour
+    warp_error_threshold = 0.125
     
     def __init__(self, _fname, _rows=None, _cols=None, _proj=None, *args):
         """
@@ -176,12 +182,13 @@ class multiraster2transform (raster2multiarray):
         if args[0] is list = bands list
         else args = bands list
         """
+        # attrs control
+        self._attrs_control += ["warp_resampling", "warp_error_threshold"]
         # raster and bands numer init
         self.fname = _fname
         raster = raster2array(self.fname, 1)
         if args == ():
-            rcount = raster.Ds.RasterCount
-            self.bands_num = range(1, rcount+1)
+            self.bands_num = range(1, raster.bands+1)
         elif type(args[0]) is list:
             self.bands_num = args[0]
         else:
@@ -200,6 +207,11 @@ class multiraster2transform (raster2multiarray):
         if _proj is None:
             _proj = raster.Projection
         self.Projection = proj_conv(None, _proj).get_proj()
+        # codage init
+        self.return_band_codage()
+        # nodata init
+        if raster.nodata is not None:
+            self.return_band_nodata()
         # create list bands image
         self.create_bands_img()
     
@@ -216,6 +228,8 @@ class multiraster2transform (raster2multiarray):
             img.codage = self.codage
             img.scale = self.scale
             img.nodata = self.nodata
+            img.warp_resampling = self.warp_resampling
+            img.warp_error_threshold = self.warp_error_threshold
             self.bands_img.append(img)
             
     def multitransform(_method):

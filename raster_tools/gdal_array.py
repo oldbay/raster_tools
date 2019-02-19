@@ -500,9 +500,15 @@ class raster2array (geom_conv):
 class array2raster(raster2array):
     """
     Class array to raster function
+    
+    drvname (default False)
+    overviews - overviews raster pyramid default - None 
+                tuple or list: ("NEAREST", [2, 4, 8, 16, 32, 64])
     """
+    drvname = False
+    overviews = None 
 
-    def __init__(self, _raster, _array, _fname=False, _band=1, _drv=False, _nodata=None):
+    def __init__(self, _raster, _array, _fname=False, _band=1):
         """
         _raster = oject to raster2array OR gdal.dataset OR None
         _array = np.array OR standart dict
@@ -513,7 +519,6 @@ class array2raster(raster2array):
         """
 
         self.fname = _fname
-        self.drvname = _drv
         self._gdal_opts = self._gdal_test()
         # image size and tiles
         if isinstance(_array, dict):
@@ -561,18 +566,18 @@ class array2raster(raster2array):
                              options=self._gdal_opts)
         self.Ds.SetGeoTransform(self.GeoTransform)
         self.Ds.SetProjection(proj_conv(None, self.Projection).get_proj())
-        self.Band = self.Ds.GetRasterBand(_band)
+        self.Band = self.Ds.GetRasterBand(1)
+        # insert nodata
+        if self.nodata is not None:
+            self.Band.SetNoDataValue(self.nodata)
         # write array
+        # write array as codage !!!! and nodata ????
         if isinstance(_array, np.ndarray):
             self.Band.WriteArray(_array)
         self.Band.FlushCache()
-        # insert nodata
-        if _nodata is not None:
-            self.nodata = _nodata
-        if self.nodata is not None:
-            self.Band.SetNoDataValue(self.nodata)
         # pyramid overviews
-        #self.Ds.BuildOverviews("NEAREST", [2, 4, 8, 16, 32, 64])
+        if isinstance(self.overviews, tuple) or isinstance(self.overviews, list):
+            self.Ds.BuildOverviews(*self.overviews)
         # init rastre2array vars
         self.GeoTransform = self.Ds.GetGeoTransform()
         self.TL_x = float(self.GeoTransform[0])
@@ -621,12 +626,12 @@ class array2raster(raster2array):
     def __del__(self):
         if echo_output and self.drvname != 'MEM':
             statistics = self.Band.GetStatistics(0, 1)
-            print "Otupput raster: %s" % self.fname
-            print "Metadata:"
-            print "  STATISTICS_MAXIMUM=%s" % str(statistics[1])
-            print "  STATISTICS_MEAN=%s" % str(statistics[2])
-            print "  STATISTICS_MINIMUM=%s" % str(statistics[0])
-            print "  STATISTICS_STDDEV=%s" % str(statistics[3])
+            print ("Otupput raster: %s" % self.fname)
+            print ("Metadata:")
+            print ("  STATISTICS_MAXIMUM=%s" % str(statistics[1]))
+            print ("  STATISTICS_MEAN=%s" % str(statistics[2]))
+            print ("  STATISTICS_MINIMUM=%s" % str(statistics[0]))
+            print ("  STATISTICS_STDDEV=%s" % str(statistics[3]))
         self.Band = None
         self.Ds = None
 
@@ -635,6 +640,9 @@ class raster2transform(raster2array):
     """
     Class for raster tranfsormation
     """
+    warp_resampling = gdal.GRA_NearestNeighbour
+    warp_error_threshold = 0.125
+    warp_mask = 255
 
     def __init__(self, _input, _rows=None, _cols=None, _proj=None, _band=1):
         """
@@ -653,9 +661,10 @@ class raster2transform(raster2array):
         self.scale = raster2array.scale
         self.nodata = raster2array.nodata
         self.np_array = raster2array.np_array
+        self.band_num = _band
         # raster init
         if isinstance(_input, str) or isinstance(_input, unicode):
-            self.raster = raster2array(_input, _band)
+            self.raster = raster2array(_input, self.band_num)
         elif isinstance(_input, dict):
             self.raster = array2raster(None, _input)
         elif isinstance(_input, raster2array) or isinstance(_input, array2raster):
@@ -700,18 +709,81 @@ class raster2transform(raster2array):
             raise Exception('projection for georeference not found')
         # warp raster to new projection 
         if args == () and self.Projection != self.raster.Projection:
-            resampling = gdal.GRA_NearestNeighbour
-            error_threshold = 0.125
+            # create mask array
+            if self.nodata is not None:
+                mask = array2raster(
+                    None,
+                    {
+                        "array": np.full(
+                            (self.raster.rows, self.raster.cols), 
+                            self.warp_mask, 
+                            dtype=self.raster.codage
+                            ),
+                        "shape": (self.raster.rows, self.raster.cols),
+                        "transform": (
+                            self.raster.TL_x,
+                            self.raster.x_res,
+                            self.raster.x_diff,
+                            self.raster.TL_y,
+                            self.raster.y_diff,
+                            self.raster.y_res
+                        ),
+                        "projection": self.raster.Projection,
+                        "nodata": None,
+                    }
+                )
+                mask = array2raster(
+                    gdal.AutoCreateWarpedVRT(
+                        mask.Ds, 
+                        None, 
+                        self.Projection, 
+                        self.warp_resampling, 
+                        self.warp_error_threshold,
+                    ),
+                    None
+                )
+                mask = mask.array()
+            else:
+                mask = None
+            # warping
             self.raster = array2raster(
                 gdal.AutoCreateWarpedVRT(
                     self.raster.Ds, 
                     None, 
                     self.Projection, 
-                    resampling, 
-                    error_threshold,
+                    self.warp_resampling, 
+                    self.warp_error_threshold,
                 ),
-                None
+                None, 
+                False, 
+                self.band_num
             )
+            # enter mask
+            if mask is not None:
+                rarray = self.raster.array()
+                self.raster = array2raster(
+                    None,
+                    {
+                        "array": np.where(
+                            mask==self.warp_mask, 
+                            rarray, 
+                            self.nodata
+                            ), 
+                        "shape": (self.raster.rows, self.raster.cols),
+                        "transform": (
+                            self.raster.TL_x,
+                            self.raster.x_res,
+                            self.raster.x_diff,
+                            self.raster.TL_y,
+                            self.raster.y_diff,
+                            self.raster.y_res
+                        ),
+                        "projection": self.raster.Projection,
+                        "nodata": self.raster.nodata,
+                    }
+                )
+                del(rarray)
+                mask = None
         # input params
         _cols = self.raster.cols
         _rows = self.raster.rows
