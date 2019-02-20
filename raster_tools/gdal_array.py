@@ -10,7 +10,8 @@ from config import (
     numpy_codage_type, 
     gdal2numpy_type, 
     numpy2gdal_type, 
-    def_scale, 
+    def_scale,
+    def_overviews, 
     numpy_type2nodata
 )
 from vector_ops import proj_conv, geom_conv
@@ -503,10 +504,16 @@ class array2raster(raster2array):
     
     drvname (default False)
     overviews - overviews raster pyramid default - None 
-                tuple or list: ("NEAREST", [2, 4, 8, 16, 32, 64])
+                tuple or list or True = default pyramid
     """
     drvname = False
-    overviews = None 
+    overviews = None
+    ds_create_attrs = [
+        'drvname', 
+        'overviews', 
+        'codage',
+        'nodata'
+    ]
 
     def __init__(self, _raster, _array, _fname=False, _band=1):
         """
@@ -517,17 +524,22 @@ class array2raster(raster2array):
         _drv = driver raster file
         _nodata = nodata metadata for raster
         """
-
+        
+        self.def_complete = False
         self.fname = _fname
-        self._gdal_opts = self._gdal_test()
         # image size and tiles
         if isinstance(_array, dict):
             self.GeoTransform = _array["transform"]
             self.rows = _array["shape"][0]
             self.cols = _array["shape"][1]
             self.Projection = _array["projection"]
-            self.nodata = _array["nodata"]
+            _nodata = _array["nodata"]
             _array = _array["array"]
+            if isinstance(_array, np.ndarray):
+                self.codage = _array.dtype.type
+            else:
+                self.codage = np.float64
+            self.nodata = _nodata
         elif isinstance(_raster, raster2array):
             self.GeoTransform = _raster.GeoTransform
             self.cols = _raster.cols
@@ -549,13 +561,26 @@ class array2raster(raster2array):
                 _array = _raster_band.ReadAsArray()
         else:
             raise Exception('Array data type is wrong!')
-        # correct codage and nodata to array numpy type
-        if isinstance(_array, np.ndarray):
-            self.codage = _array.dtype.type
-        else:
-            self.codage = np.float64
-        self.nodata = numpy_type2nodata(self.codage, self.nodata)
-        #create raster
+        # save first array
+        self.np_array = _array
+        self.Ds = None
+        self.Band = None
+        self.def_complete = True
+        # create new raster Ds
+        self.create_raster_ds()
+        
+    def __setattr__(self, name, value):
+        super(array2raster, self).__setattr__(name, value)
+        if name in self.ds_create_attrs and self.def_complete:
+            self.create_raster_ds()
+        
+    def create_raster_ds(self):
+        self.def_complete = False
+        self._gdal_opts = self._gdal_test()
+        # load array
+        if isinstance(self.Band, gdal.Band):
+            self.np_array_load()
+        # create Ds
         raster_codage = numpy2gdal_type(self.codage)
         drv = gdal.GetDriverByName(self.drvname)
         self.Ds = drv.Create(self.fname,
@@ -571,13 +596,14 @@ class array2raster(raster2array):
         if self.nodata is not None:
             self.Band.SetNoDataValue(self.nodata)
         # write array
-        # write array as codage !!!! and nodata ????
-        if isinstance(_array, np.ndarray):
-            self.Band.WriteArray(_array)
+        if isinstance(self.np_array, np.ndarray):
+            self.Band.WriteArray(self.np_array)
         self.Band.FlushCache()
         # pyramid overviews
         if isinstance(self.overviews, tuple) or isinstance(self.overviews, list):
             self.Ds.BuildOverviews(*self.overviews)
+        elif self.overviews:
+            self.Ds.BuildOverviews(*def_overviews)
         # init rastre2array vars
         self.GeoTransform = self.Ds.GetGeoTransform()
         self.TL_x = float(self.GeoTransform[0])
@@ -590,7 +616,9 @@ class array2raster(raster2array):
         self.rows = self.Ds.RasterYSize
         self.bands = self.Ds.RasterCount
         self.nodata = self.Band.GetNoDataValue()
-        self.np_array = None
+        # clean array
+        self.np_array_clean()
+        self.def_complete = True
 
     def _gdal_test(self):
         if (not self.fname and not self.drvname) or (not self.fname and self.drvname):
@@ -639,10 +667,18 @@ class array2raster(raster2array):
 class raster2transform(raster2array):
     """
     Class for raster tranfsormation
+
+    warp_resampling = warp alghoritm (gdal.GRA_* = int)
+    warp_error_threshold = warp error threshold (float)
+    warp_mask = warp mask (int)
+    raster_drvname = array2raster.drvname
+    raster_overviews = array2raster.overviews
     """
     warp_resampling = gdal.GRA_NearestNeighbour
     warp_error_threshold = 0.125
     warp_mask = 255
+    raster_drvname = False
+    raster_overviews = None
 
     def __init__(self, _input, _rows=None, _cols=None, _proj=None, _band=1):
         """
@@ -907,7 +943,9 @@ class raster2transform(raster2array):
         return self.transform_shp_layer()
 
     def save(self, _fname):
-        array2raster(self, None, _fname)
+        raster = array2raster(self, None, _fname)
+        if self.raster_drvname: raster.drvname = self.raster_drvname
+        if self.raster_overviews: raster.overviews = self.raster_overviews
 
     # overloading methods for use in raster2calc
     def get_std_dict(self, *args, **kwargs):

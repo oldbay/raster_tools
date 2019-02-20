@@ -33,6 +33,8 @@ raster_params = {
 
 def_scale = [2, 253]
 
+def_overviews = ("NEAREST", [2, 4, 8, 16, 32, 64])
+
 gdal2numpy_type = {
     gdal.GDT_Unknown: np.float32,
     gdal.GDT_Byte: np.uint8,

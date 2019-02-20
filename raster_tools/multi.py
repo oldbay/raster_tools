@@ -6,7 +6,8 @@ import numpy as np
 from config import (
     GDAL_OPTS, 
     gdal2numpy_type, 
-    numpy2gdal_type, 
+    numpy2gdal_type,
+    def_overviews
 )
 from gdal_array import array2raster, raster2array, raster2transform
 from vector_ops import proj_conv
@@ -168,9 +169,16 @@ class raster2multiarray (object):
 class multiraster2transform (raster2multiarray):
     """
     Class for multiraster tranfsormation
+
+    warp_resampling = warp alghoritm (gdal.GRA_* = int)
+    warp_error_threshold = warp error threshold (float)
+    raster_drvname = raster2multiraster.drvname
+    raster_overviews = raster2multiraster.overviews
     """
     warp_resampling = gdal.GRA_NearestNeighbour
     warp_error_threshold = 0.125
+    raster_drvname = False
+    raster_overviews = None
     
     def __init__(self, _fname, _rows=None, _cols=None, _proj=None, *args):
         """
@@ -260,7 +268,9 @@ class multiraster2transform (raster2multiarray):
         pass
     
     def save(self, _fname):
-        raster2multiraster(_fname, *self.bands_img)
+        raster = raster2multiraster(_fname, *self.bands_img)
+        if self.raster_drvname: raster.drvname = self.raster_drvname
+        if self.raster_overviews: raster.overviews = self.raster_overviews
 
     # overloading raster2multiarray methods
     def array(self, *args, **kwargs):
@@ -283,22 +293,29 @@ class multiraster2transform (raster2multiarray):
     
     
 class raster2multiraster (object):
+    """
+    Class array to raster function
+    
+    drvname (default False)
+    overviews - overviews raster pyramid default - None 
+                tuple or list or True = default pyramid
+    """
+    drvname = False
+    overviews = None
 
     def __init__(self, _fname, *args):
         """
         args = list objets form array2raster or raster2array (band 1 only)
-        args[-1] = drvname or default GTiff
         """
         self.fname = _fname
         if type(args[0]) is list:
             self.ext_rasters = args[0]
         else:
             self.ext_rasters = args
-        if type(args[-1]) == str:
-            self.drvname = args[-1]
-        else:
+        
+    def create_raster_ds(self):
+        if not (isinstance(self.drvname, str) or isinstance(self.drvname, unicode)):
             self.drvname = "GTiff"
-        # image size and tiles
         self.GeoTransform = self.ext_rasters[0].GeoTransform
         self.cols = self.ext_rasters[0].cols
         self.rows = self.ext_rasters[0].rows
@@ -316,7 +333,10 @@ class raster2multiraster (object):
         self.Ds.SetProjection(self.Projection)
         self.add_bands()
         # pyramid overviews
-        #self.Ds.BuildOverviews("NEAREST", [2, 4, 8, 16, 32, 64])
+        if isinstance(self.overviews, tuple) or isinstance(self.overviews, list):
+            self.Ds.BuildOverviews(*self.overviews)
+        elif self.overviews:
+            self.Ds.BuildOverviews(*def_overviews)
 
     def add_bands(self):
         _def_params = [
@@ -349,6 +369,7 @@ class raster2multiraster (object):
             return GDAL_OPTS['all']
 
     def __del__(self):
+        self.create_raster_ds()
         self.Ds = None
 
 
@@ -356,7 +377,13 @@ class multiarray2multiraster(object):
 
     """
     input multiarray in unidict form
+
+    drvname (default False)
+    overviews - overviews raster pyramid default - None 
+                tuple or list or True = default pyramid
     """
+    drvname = False
+    overviews = None
 
     def __init__(self, _fanme, _mdict):
         self.fname = _fanme
@@ -375,7 +402,7 @@ class multiarray2multiraster(object):
 
     def save(self):
         # save multi dict to raster
-        raster2multiraster(
+        raster = raster2multiraster(
             self.fname,
             [
                 array2raster(
@@ -392,6 +419,8 @@ class multiarray2multiraster(object):
                 in self.mdict["array"]
             ]
         )
+        if self.drvname: raster.drvname = self.drvname
+        if self.overviews: raster.overviews = self.overviews
    
     def __call__(self):
         self.save()
