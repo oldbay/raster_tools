@@ -671,14 +671,14 @@ class raster2transform(raster2array):
     warp_resampling = warp alghoritm (gdal.GRA_* = int)
     warp_error_threshold = warp error threshold (float)
     warp_mask = warp mask (int)
-    raster_drvname = array2raster.drvname
-    raster_overviews = array2raster.overviews
+    drvname = array2raster.drvname
+    overviews = array2raster.overviews
     """
     warp_resampling = gdal.GRA_NearestNeighbour
     warp_error_threshold = 0.125
     warp_mask = 255
-    raster_drvname = False
-    raster_overviews = None
+    drvname = False
+    overviews = None
 
     def __init__(self, _input, _rows=None, _cols=None, _proj=None, _band=1):
         """
@@ -946,8 +946,8 @@ class raster2transform(raster2array):
 
     def save(self, _fname):
         raster = array2raster(self, None, _fname)
-        if self.raster_drvname: raster.drvname = self.raster_drvname
-        if self.raster_overviews: raster.overviews = self.raster_overviews
+        if self.drvname: raster.drvname = self.drvname
+        if self.overviews: raster.overviews = self.overviews
 
     # overloading methods for use in raster2calc
     def get_std_dict(self, *args, **kwargs):

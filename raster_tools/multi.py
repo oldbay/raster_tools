@@ -172,13 +172,13 @@ class multiraster2transform (raster2multiarray):
 
     warp_resampling = warp alghoritm (gdal.GRA_* = int)
     warp_error_threshold = warp error threshold (float)
-    raster_drvname = raster2multiraster.drvname
-    raster_overviews = raster2multiraster.overviews
+    drvname = raster2multiraster.drvname
+    overviews = raster2multiraster.overviews
     """
     warp_resampling = gdal.GRA_NearestNeighbour
     warp_error_threshold = 0.125
-    raster_drvname = False
-    raster_overviews = None
+    drvname = False
+    overviews = None
     
     def __init__(self, _fname, _rows=None, _cols=None, _proj=None, *args):
         """
@@ -269,8 +269,8 @@ class multiraster2transform (raster2multiarray):
     
     def save(self, _fname):
         raster = raster2multiraster(_fname, *self.bands_img)
-        if self.raster_drvname: raster.drvname = self.raster_drvname
-        if self.raster_overviews: raster.overviews = self.raster_overviews
+        if self.drvname: raster.drvname = self.drvname
+        if self.overviews: raster.overviews = self.overviews
 
     # overloading raster2multiarray methods
     def array(self, *args, **kwargs):
