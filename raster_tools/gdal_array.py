@@ -874,7 +874,7 @@ class raster2transform(raster2array):
                     y_res
                 ),
                 "projection": self.Projection,
-                "nodata": self.nodata,
+                "nodata": self.raster.nodata,
             }
         )
         # transformation
@@ -883,6 +883,9 @@ class raster2transform(raster2array):
             [t_raster.Band],
             'mode'
         )
+        # init value
+        if t_raster.codage != self.codage: t_raster.codage = self.codage
+        if t_raster.nodata != self.nodata: t_raster.nodata = self.nodata
         # reinit new value
         self.Ds = t_raster.Ds
         self.GeoTransform = self.Ds.GetGeoTransform()
@@ -897,7 +900,6 @@ class raster2transform(raster2array):
         self.rows = self.Ds.RasterYSize
         self.bands = self.Ds.RasterCount
         self.Band = self.Ds.GetRasterBand(1)
-        #self.raster = None
        
     def transform_shp_layer(self, layer=None):
         """
