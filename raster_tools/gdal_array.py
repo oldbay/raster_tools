@@ -109,6 +109,7 @@ class raster2array (geom_conv):
                 r_max = np.max(np.where(_rsater==band_nodata, np.min(_rsater), _rsater))
                 r_min = np.min(np.where(_rsater==band_nodata, np.max(_rsater), _rsater))
                 r_meso = r_max - r_min
+                _rsater = _rsater.astype(np.float64)  # for normal diaposon calculation
                 _rsater = (((_rsater-r_min)*s_meso)/r_meso)+s_min
             else:
                 _rsater = np.where(

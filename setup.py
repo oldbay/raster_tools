@@ -3,7 +3,7 @@ from os.path import join, dirname
 
 setup(
     name='raster_tools',
-    version='0.8',
+    version='0.8.1',
     packages=find_packages(),
     long_description=open(join(dirname(__file__), 'README.rst')).read(),
     install_requires=[
