@@ -155,7 +155,7 @@ class geom_conv(object):
         # test insert args
         if len(args) == 0:
             return None
-        elif len(args) == 1 and isinstance[args[0], list]:
+        elif len(args) == 1 and isinstance(args[0], list):
             in_coords = args[0]
         else:
             in_coords = args
