@@ -1,21 +1,33 @@
-#!/usr/bin/python2
-# -*- coding: utf-8 -*-
 
-from vector_ops import (
+from .vector_ops import (
     proj_conv,
     geom_conv
 )
-from gdal_array import (
+from .gdal_array import (
     raster2array,
     array2raster,
     raster2transform,
     raster2calc
 )
-from multi import (
+from .multi import (
     raster2multiarray,
     multiraster2transform, 
     raster2multiraster,
     multiarray2multiraster,
     repair2reload
 )
-from config import GDAL_OPTS
+from .config import GDAL_OPTS
+
+__all__ = [
+    proj_conv,
+    geom_conv,
+    raster2array,
+    array2raster,
+    raster2transform,
+    raster2calc,
+    raster2multiarray,
+    multiraster2transform,
+    raster2multiraster,
+    multiarray2multiraster,
+    repair2reload, 
+]

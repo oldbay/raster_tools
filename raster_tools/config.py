@@ -72,7 +72,7 @@ def numpy_codage_type(_codage):
         pass
     elif isinstance(_codage, np.ndarray):
         _codage = _codage.dtype.type
-    elif isinstance(_codage, str) or isinstance(_codage, unicode):
+    elif isinstance(_codage, str):
         _codage = np.dtype(_codage).type
     else:
         _codage = False
@@ -81,7 +81,7 @@ def numpy_codage_type(_codage):
 
 def numpy2gdal_type(numpy_type):
     numpy_type = numpy_codage_type(numpy_type)
-    if not numpy2gdal_type_dict.has_key(numpy_type):
+    if numpy_type not in numpy2gdal_type_dict.keys():
         numpy_type = np.float64
         
     return numpy2gdal_type_dict[numpy_type]

@@ -214,7 +214,7 @@ class geom_conv(object):
         Reprojection layer
         """
         # test null layer or projection
-        if self.Projection == '' or not self.__dict__.has_key('Layer'):
+        if self.Projection == '' or 'Layer' not in self.__dict__.keys():
             return None
         # test insert layer
         if _layer is None:
@@ -306,7 +306,7 @@ class geom_conv(object):
         self.layer_reproj()
 
     def get_layer_extent(self):
-        if self.__dict__.has_key('Layer'):
+        if 'Layer' in self.__dict__.keys():
             return self.Layer.GetExtent()
         else:
             return None

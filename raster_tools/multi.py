@@ -3,14 +3,14 @@
 
 from osgeo import gdal
 import numpy as np
-from config import (
+from .config import (
     GDAL_OPTS, 
     gdal2numpy_type, 
     numpy2gdal_type,
     def_overviews
 )
-from gdal_array import array2raster, raster2array, raster2transform
-from vector_ops import proj_conv
+from .gdal_array import array2raster, raster2array, raster2transform
+from .vector_ops import proj_conv
 
 
 class raster2multiarray (object):
@@ -314,7 +314,7 @@ class raster2multiraster (object):
             self.ext_rasters = args
         
     def create_raster_ds(self):
-        if not (isinstance(self.drvname, str) or isinstance(self.drvname, unicode)):
+        if not isinstance(self.drvname, str):
             self.drvname = "GTiff"
         self.GeoTransform = self.ext_rasters[0].GeoTransform
         self.cols = self.ext_rasters[0].cols

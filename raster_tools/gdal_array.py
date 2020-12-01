@@ -3,7 +3,7 @@
 
 from osgeo import gdal
 import numpy as np
-from config import (
+from .config import (
     GDAL_OPTS, 
     raster_params, 
     echo_output,
@@ -14,7 +14,7 @@ from config import (
     def_overviews, 
     numpy_type2nodata
 )
-from vector_ops import proj_conv, geom_conv
+from .vector_ops import proj_conv, geom_conv
 try:
     from pyproj import Geod
 except:
@@ -369,7 +369,7 @@ class raster2array (geom_conv):
         lr = self.get_index_coord(self.cols, self.rows)
         ll = self.get_index_coord(self.cols, 0)
         out_ret = self.coords_reproj(proj, ul, ur, lr, ll, ul)
-        if isinstance(out, str) or isinstance(out, unicode):
+        if isinstance(out, str):
             if out.lower() in ("geojson", "gjson", "json"):
                 out_ret = {
                     "type": "Polygon",
@@ -700,7 +700,7 @@ class raster2transform(raster2array):
         self.np_array = raster2array.np_array
         self.band_num = _band
         # raster init
-        if isinstance(_input, str) or isinstance(_input, unicode):
+        if isinstance(_input, str):
             self.raster = raster2array(_input, self.band_num)
         elif isinstance(_input, dict):
             self.raster = array2raster(None, _input)
